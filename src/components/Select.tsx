@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface SelectProps {
   value: string | number;
   onChange: (value: string) => void;

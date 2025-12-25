@@ -1,5 +1,4 @@
 import { Person, ValidationError } from './types';
-import { WORK_RULES } from './constants';
 
 export function validateScheduleInputs(
   year: number,

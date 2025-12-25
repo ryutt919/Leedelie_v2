@@ -8,9 +8,6 @@ export function generateSchedule(year: number, month: number, people: Person[]):
 
   // 각 날짜별로 배정
   for (let date = 1; date <= daysInMonth; date++) {
-    const dayOfWeek = new Date(year, month - 1, date).getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
     const dayAssignment: DayAssignment = {
       date,
       people: []
