@@ -5,11 +5,6 @@ import { Button } from '../components/Button';
 export function HomePage() {
   return (
     <div className="container">
-      <div className="hero">
-        <h1>근무 스케줄 관리 시스템</h1>
-        <p>효율적인 근무 스케줄 생성과 관리를 시작하세요</p>
-      </div>
-
       <div className="cards-grid">
         <Card title="근무 스케줄 생성">
           <p>새로운 월간 근무 스케줄을 생성합니다.</p>

@@ -8,7 +8,7 @@ import { Checkbox } from '../components/Checkbox';
 import { Person, Schedule, ValidationError } from '../types';
 import { WORK_RULES } from '../constants';
 import { validateScheduleInputs, getDaysInMonth } from '../validator';
-import { generateSchedule, validateGeneratedSchedule } from '../generator';
+import { generateSchedule, validateGeneratedSchedule, ScheduleGenerationError } from '../generator';
 import { saveSchedule } from '../storage';
 
 export function CreateSchedulePage() {
@@ -73,18 +73,28 @@ export function CreateSchedulePage() {
       return;
     }
 
-    const newSchedule = generateSchedule(year, month, people);
-    
-    // 생성된 스케줄 검증
-    const generationErrors = validateGeneratedSchedule(newSchedule);
-    if (generationErrors.length > 0) {
-      setErrors(generationErrors);
+    try {
+      const newSchedule = generateSchedule(year, month, people);
+
+      // 생성된 스케줄 검증(방어적)
+      const generationErrors = validateGeneratedSchedule(newSchedule);
+      if (generationErrors.length > 0) {
+        setErrors(generationErrors);
+        setSchedule(null);
+        return;
+      }
+
+      setSchedule(newSchedule);
+      setErrors([]);
+    } catch (err) {
+      if (err instanceof ScheduleGenerationError) {
+        setErrors(err.errors);
+        setSchedule(null);
+        return;
+      }
+      setErrors([{ type: 'unknown', message: '스케줄 생성 중 알 수 없는 오류가 발생했습니다.' }]);
       setSchedule(null);
-      return;
     }
-    
-    setSchedule(newSchedule);
-    setErrors([]);
   };
 
   // 스케줄 저장

@@ -2,6 +2,16 @@ import { Person, DayAssignment, Schedule, ShiftType, ValidationError } from './t
 import { WORK_RULES } from './constants';
 import { getDaysInMonth } from './validator';
 
+export class ScheduleGenerationError extends Error {
+  public readonly errors: ValidationError[];
+
+  constructor(errors: ValidationError[]) {
+    super('Schedule generation failed');
+    this.name = 'ScheduleGenerationError';
+    this.errors = errors;
+  }
+}
+
 export function validateGeneratedSchedule(schedule: Schedule): ValidationError[] {
   const errors: ValidationError[] = [];
 
@@ -41,6 +51,7 @@ export function validateGeneratedSchedule(schedule: Schedule): ValidationError[]
 export function generateSchedule(year: number, month: number, people: Person[]): Schedule {
   const daysInMonth = getDaysInMonth(year, month);
   const assignments: DayAssignment[] = [];
+  const generationErrors: ValidationError[] = [];
 
   // 각 날짜별로 배정
   for (let date = 1; date <= daysInMonth; date++) {
@@ -111,7 +122,35 @@ export function generateSchedule(year: number, month: number, people: Person[]):
       });
     }
 
+    // 생성 결과(해당 날짜)가 규칙을 만족하는지 즉시 검증
+    const openCount = dayAssignment.people.filter(p => p.shift === 'open').length;
+    const closeCount = dayAssignment.people.filter(p => p.shift === 'close').length;
+    const totalCount = dayAssignment.people.length;
+
+    if (totalCount !== WORK_RULES.DAILY_STAFF) {
+      generationErrors.push({
+        type: 'insufficient-staff',
+        message: `${date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${WORK_RULES.DAILY_STAFF}명)`
+      });
+    }
+    if (openCount === 0) {
+      generationErrors.push({
+        type: 'no-opener-assigned',
+        message: `${date}일: 오픈조에 배정된 인원이 없습니다.`
+      });
+    }
+    if (closeCount === 0) {
+      generationErrors.push({
+        type: 'no-closer-assigned',
+        message: `${date}일: 마감조에 배정된 인원이 없습니다.`
+      });
+    }
+
     assignments.push(dayAssignment);
+  }
+
+  if (generationErrors.length > 0) {
+    throw new ScheduleGenerationError(generationErrors);
   }
 
   return {

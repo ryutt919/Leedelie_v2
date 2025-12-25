@@ -10,7 +10,7 @@ function App() {
       <div className="app">
         <nav className="navbar">
           <Link to="/" className="logo">
-            <h2>근무 스케줄 관리</h2>
+            <h2>leedeli management</h2>
           </Link>
           <div className="nav-links">
             <Link to="/">홈</Link>
