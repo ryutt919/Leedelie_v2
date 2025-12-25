@@ -1,4 +1,5 @@
 import { Person, ValidationError } from './types';
+import { getWorkRules } from './workRules';
 
 export function validateScheduleInputs(
   year: number,
@@ -6,6 +7,7 @@ export function validateScheduleInputs(
   people: Person[]
 ): ValidationError[] {
   const errors: ValidationError[] = [];
+  const rules = getWorkRules();
 
   // 연도/월 검증
   if (!year || year < 2000 || year > 2100) {
@@ -54,7 +56,7 @@ export function validateScheduleInputs(
     }
   });
 
-  // 스케줄 생성 가능 여부 검증 (일별 3명 배치 가능한지)
+  // 스케줄 생성 가능 여부 검증 (일별 인원 배치 가능한지)
   const daysInMonth = getDaysInMonth(year, month);
   
   // 필수 인원이 있는 경우, 각 날짜별로 최소 1명의 필수 인원이 가능한지 확인
@@ -64,8 +66,11 @@ export function validateScheduleInputs(
   for (let date = 1; date <= daysInMonth; date++) {
     const availableForDay = people.filter(p => !p.requestedDaysOff.includes(date));
     
-    if (availableForDay.length < 3) {
-      errors.push({ type: 'insufficient', message: `${date}일: 근무 가능한 인원이 ${availableForDay.length}명으로 부족합니다. (필요: 3명)` });
+    if (availableForDay.length < rules.DAILY_STAFF) {
+      errors.push({
+        type: 'insufficient',
+        message: `${date}일: 근무 가능한 인원이 ${availableForDay.length}명으로 부족합니다. (필요: ${rules.DAILY_STAFF}명)`
+      });
     }
     
     const canOpenOnDay = availableForDay.filter(p => p.canOpen).length;

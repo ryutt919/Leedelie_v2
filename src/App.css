@@ -189,6 +189,25 @@ body {
   font-weight: 600;
 }
 
+.rule-inline {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rule-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rule-inline-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
 /* Form Elements */
 .form-row {
   display: grid;

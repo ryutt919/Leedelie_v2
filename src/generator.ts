@@ -1,7 +1,7 @@
 import { Person, DayAssignment, Schedule, ShiftType, ValidationError } from './types';
-import { WORK_RULES } from './constants';
 import { getDaysInMonth } from './validator';
 import * as XLSX from 'xlsx';
+import { getWorkRules } from './workRules';
 
 export class ScheduleGenerationError extends Error {
   public readonly errors: ValidationError[];
@@ -15,6 +15,7 @@ export class ScheduleGenerationError extends Error {
 
 export function validateGeneratedSchedule(schedule: Schedule): ValidationError[] {
   const errors: ValidationError[] = [];
+  const rules = getWorkRules();
 
   schedule.assignments.forEach(day => {
     const openCount = day.people.filter(p => p.shift === 'open').length;
@@ -22,10 +23,10 @@ export function validateGeneratedSchedule(schedule: Schedule): ValidationError[]
     const totalCount = day.people.length;
 
     // 총 인원 체크
-    if (totalCount !== WORK_RULES.DAILY_STAFF) {
+    if (totalCount !== rules.DAILY_STAFF) {
       errors.push({
         type: 'insufficient-staff',
-        message: `${day.date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${WORK_RULES.DAILY_STAFF}명)`
+        message: `${day.date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${rules.DAILY_STAFF}명)`
       });
     }
 
@@ -53,6 +54,7 @@ export function generateSchedule(year: number, month: number, people: Person[]):
   const daysInMonth = getDaysInMonth(year, month);
   const assignments: DayAssignment[] = [];
   const generationErrors: ValidationError[] = [];
+  const rules = getWorkRules();
 
   // 각 날짜별로 배정
   for (let date = 1; date <= daysInMonth; date++) {
@@ -94,7 +96,7 @@ export function generateSchedule(year: number, month: number, people: Person[]):
     const alreadyAssigned = dayAssignment.people.map(p => p.personId);
     const remainingPeople = availablePeople.filter(p => !alreadyAssigned.includes(p.id));
 
-    while (dayAssignment.people.length < WORK_RULES.DAILY_STAFF && remainingPeople.length > 0) {
+    while (dayAssignment.people.length < rules.DAILY_STAFF && remainingPeople.length > 0) {
       const person = remainingPeople.shift()!;
       
       // 오픈이 부족하면 오픈 가능한 사람 배치
@@ -128,10 +130,10 @@ export function generateSchedule(year: number, month: number, people: Person[]):
     const closeCount = dayAssignment.people.filter(p => p.shift === 'close').length;
     const totalCount = dayAssignment.people.length;
 
-    if (totalCount !== WORK_RULES.DAILY_STAFF) {
+    if (totalCount !== rules.DAILY_STAFF) {
       generationErrors.push({
         type: 'insufficient-staff',
-        message: `${date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${WORK_RULES.DAILY_STAFF}명)`
+        message: `${date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${rules.DAILY_STAFF}명)`
       });
     }
     if (openCount === 0) {
