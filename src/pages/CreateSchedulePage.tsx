@@ -425,19 +425,18 @@ export function CreateSchedulePage() {
           const staffForDay = dailyStaffByDate[dayNum] ?? rules.DAILY_STAFF_BASE;
           const isBaseStaff = staffForDay === rules.DAILY_STAFF_BASE;
 
-          const summaries: DayRequestSummary[] = people
-            .map((p: Person) => {
-              if (p.requestedDaysOff.includes(dayNum)) {
-                return { key: `${p.id}-off`, name: p.name, kind: 'off' as const };
-              }
-              const hs = p.halfRequests?.[dayNum];
-              if (hs !== undefined) {
-                const hsLabel = hs === 'open' ? '오픈' : hs === 'middle' ? '미들' : '마감';
-                return { key: `${p.id}-half`, name: p.name, kind: 'half' as const, shiftLabel: hsLabel };
-              }
-              return null;
-            })
-            .filter((v: DayRequestSummary | null): v is DayRequestSummary => v !== null);
+          const summaries: DayRequestSummary[] = people.reduce<DayRequestSummary[]>((acc, p) => {
+            if (p.requestedDaysOff.includes(dayNum)) {
+              acc.push({ key: `${p.id}-off`, name: p.name, kind: 'off' });
+              return acc;
+            }
+            const hs = p.halfRequests?.[dayNum];
+            if (hs !== undefined) {
+              const hsLabel = hs === 'open' ? '오픈' : hs === 'middle' ? '미들' : '마감';
+              acc.push({ key: `${p.id}-half`, name: p.name, kind: 'half', shiftLabel: hsLabel });
+            }
+            return acc;
+          }, []);
 
           return (
             <div
