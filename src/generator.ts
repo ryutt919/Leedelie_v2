@@ -1,6 +1,42 @@
-import { Person, DayAssignment, Schedule, ShiftType } from './types';
+import { Person, DayAssignment, Schedule, ShiftType, ValidationError } from './types';
 import { WORK_RULES } from './constants';
 import { getDaysInMonth } from './validator';
+
+export function validateGeneratedSchedule(schedule: Schedule): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  schedule.assignments.forEach(day => {
+    const openCount = day.people.filter(p => p.shift === 'open').length;
+    const closeCount = day.people.filter(p => p.shift === 'close').length;
+    const totalCount = day.people.length;
+
+    // 총 인원 체크
+    if (totalCount !== WORK_RULES.DAILY_STAFF) {
+      errors.push({
+        type: 'insufficient-staff',
+        message: `${day.date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${WORK_RULES.DAILY_STAFF}명)`
+      });
+    }
+
+    // 오픈조 최소 1명 체크
+    if (openCount === 0) {
+      errors.push({
+        type: 'no-opener-assigned',
+        message: `${day.date}일: 오픈조에 배정된 인원이 없습니다.`
+      });
+    }
+
+    // 마감조 최소 1명 체크
+    if (closeCount === 0) {
+      errors.push({
+        type: 'no-closer-assigned',
+        message: `${day.date}일: 마감조에 배정된 인원이 없습니다.`
+      });
+    }
+  });
+
+  return errors;
+}
 
 export function generateSchedule(year: number, month: number, people: Person[]): Schedule {
   const daysInMonth = getDaysInMonth(year, month);

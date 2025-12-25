@@ -8,7 +8,7 @@ import { Checkbox } from '../components/Checkbox';
 import { Person, Schedule, ValidationError } from '../types';
 import { WORK_RULES } from '../constants';
 import { validateScheduleInputs, getDaysInMonth } from '../validator';
-import { generateSchedule } from '../generator';
+import { generateSchedule, validateGeneratedSchedule } from '../generator';
 import { saveSchedule } from '../storage';
 
 export function CreateSchedulePage() {
@@ -74,6 +74,15 @@ export function CreateSchedulePage() {
     }
 
     const newSchedule = generateSchedule(year, month, people);
+    
+    // 생성된 스케줄 검증
+    const generationErrors = validateGeneratedSchedule(newSchedule);
+    if (generationErrors.length > 0) {
+      setErrors(generationErrors);
+      setSchedule(null);
+      return;
+    }
+    
     setSchedule(newSchedule);
     setErrors([]);
   };
