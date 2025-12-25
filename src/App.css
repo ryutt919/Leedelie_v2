@@ -98,6 +98,11 @@ body {
   color: var(--text);
 }
 
+/* Home (Main) spacing */
+.cards-grid p {
+  margin-bottom: 0.75rem;
+}
+
 /* Hero Section */
 .hero {
   text-align: center;
@@ -413,6 +418,48 @@ body {
   cursor: pointer;
   transition: all 0.2s;
   outline: none;
+}
+
+.request-day-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.staff-toggle {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.18);
+  color: inherit;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.staff-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.request-summaries {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.request-summary {
+  font-size: 0.75rem;
+  font-weight: 700;
+  opacity: 0.95;
+  line-height: 1.2;
+  color: var(--text-secondary);
+}
+
+.request-day-cell.selected .request-summary,
+.request-day-cell.half-selected .request-summary {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .request-day-cell:hover {

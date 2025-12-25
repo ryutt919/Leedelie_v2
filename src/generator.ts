@@ -16,17 +16,20 @@ export class ScheduleGenerationError extends Error {
 export function validateGeneratedSchedule(schedule: Schedule): ValidationError[] {
   const errors: ValidationError[] = [];
   const rules = getWorkRules();
+  const dailyStaffByDate = schedule.dailyStaffByDate ?? {};
 
   schedule.assignments.forEach(day => {
-    const openCount = day.people.filter(p => p.shift === 'open').length;
-    const closeCount = day.people.filter(p => p.shift === 'close').length;
-    const totalCount = day.people.length;
+    const requiredStaff = dailyStaffByDate[day.date] ?? rules.DAILY_STAFF;
+    const fullPeople = day.people.filter(p => !p.isHalf);
+    const openCount = fullPeople.filter(p => p.shift === 'open').length;
+    const closeCount = fullPeople.filter(p => p.shift === 'close').length;
+    const totalCount = fullPeople.length;
 
     // 총 인원 체크
-    if (totalCount !== rules.DAILY_STAFF) {
+    if (totalCount !== requiredStaff) {
       errors.push({
         type: 'insufficient-staff',
-        message: `${day.date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${rules.DAILY_STAFF}명)`
+        message: `${day.date}일: 배정된 풀근무 인원이 ${totalCount}명입니다. (필요: ${requiredStaff}명)`
       });
     }
 
@@ -59,6 +62,12 @@ export function validateGeneratedSchedule(schedule: Schedule): ValidationError[]
         });
         return;
       }
+      if (!assigned.isHalf) {
+        errors.push({
+          type: 'half-not-marked',
+          message: `${day.date}일: ${person.name}님의 하프 요청이 풀근무로 배정되었습니다.`
+        });
+      }
       if (assigned.shift !== requested) {
         errors.push({
           type: 'half-shift-mismatch',
@@ -71,7 +80,12 @@ export function validateGeneratedSchedule(schedule: Schedule): ValidationError[]
   return errors;
 }
 
-export function generateSchedule(year: number, month: number, people: Person[]): Schedule {
+export function generateSchedule(
+  year: number,
+  month: number,
+  people: Person[],
+  dailyStaffByDate: Record<number, number> = {}
+): Schedule {
   const daysInMonth = getDaysInMonth(year, month);
   const assignments: DayAssignment[] = [];
   const generationErrors: ValidationError[] = [];
@@ -79,15 +93,16 @@ export function generateSchedule(year: number, month: number, people: Person[]):
 
   // 각 날짜별로 배정
   for (let date = 1; date <= daysInMonth; date++) {
+    const requiredStaff = dailyStaffByDate[date] ?? rules.DAILY_STAFF;
     const dayAssignment: DayAssignment = {
       date,
       people: []
     };
 
-    // 해당 날짜에 근무 가능한 사람 필터링
+    // 해당 날짜에 근무 가능한 사람(휴무 제외)
     const availablePeople = people.filter(person => !person.requestedDaysOff.includes(date));
 
-    // 하프 요청은 먼저 고정 배정
+    // 하프 요청은 먼저 고정 배정 (하프는 근무 인원으로 미포함)
     availablePeople.forEach(person => {
       const requestedShift = person.halfRequests?.[date];
       if (requestedShift === undefined) return;
@@ -99,12 +114,16 @@ export function generateSchedule(year: number, month: number, people: Person[]):
       dayAssignment.people.push({
         personId: person.id,
         personName: person.name,
-        shift: requestedShift
+        shift: requestedShift,
+        isHalf: true
       });
     });
 
-    // 필수 오픈 인원 중 한 명 배치 (휴무가 아닌 경우)
-    const mustOpenPeople = availablePeople.filter(p => p.mustOpen && p.canOpen);
+    // 풀근무 후보: 휴무가 아니고, 하프 요청이 없는 사람
+    const availableFullPeople = availablePeople.filter(p => p.halfRequests?.[date] === undefined);
+
+    // 필수 오픈 인원 중 한 명 배치 (풀근무 후보)
+    const mustOpenPeople = availableFullPeople.filter(p => p.mustOpen && p.canOpen);
     if (mustOpenPeople.length > 0) {
       const person = mustOpenPeople[0];
       const already = dayAssignment.people.find(p => p.personId === person.id);
@@ -112,31 +131,34 @@ export function generateSchedule(year: number, month: number, people: Person[]):
         dayAssignment.people.push({
           personId: person.id,
           personName: person.name,
-          shift: 'open'
+          shift: 'open',
+          isHalf: false
         });
       }
     }
 
-    // 필수 마감 인원 중 한 명 배치 (휴무가 아닌 경우)
-    const mustClosePeople = availablePeople.filter(p => p.mustClose && p.canClose);
+    // 필수 마감 인원 중 한 명 배치 (풀근무 후보)
+    const mustClosePeople = availableFullPeople.filter(p => p.mustClose && p.canClose);
     if (mustClosePeople.length > 0) {
       const person = mustClosePeople[0];
       if (!dayAssignment.people.find(p => p.personId === person.id)) {
         dayAssignment.people.push({
           personId: person.id,
           personName: person.name,
-          shift: 'close'
+          shift: 'close',
+          isHalf: false
         });
       }
     }
 
-    // 나머지 인원 배치 (규칙 인원 수까지)
-    const alreadyAssigned = new Set(dayAssignment.people.map(p => p.personId));
-    const remainingPeople = availablePeople.filter(p => !alreadyAssigned.has(p.id));
+    // 나머지 풀근무 인원 배치 (requiredStaff까지)
+    const alreadyAssignedFull = new Set(dayAssignment.people.filter(p => !p.isHalf).map(p => p.personId));
+    const remainingPeople = availableFullPeople.filter(p => !alreadyAssignedFull.has(p.id));
 
-    while (dayAssignment.people.length < rules.DAILY_STAFF) {
-      const openCount = dayAssignment.people.filter(p => p.shift === 'open').length;
-      const closeCount = dayAssignment.people.filter(p => p.shift === 'close').length;
+    while (dayAssignment.people.filter(p => !p.isHalf).length < requiredStaff) {
+      const fullPeopleNow = dayAssignment.people.filter(p => !p.isHalf);
+      const openCount = fullPeopleNow.filter(p => p.shift === 'open').length;
+      const closeCount = fullPeopleNow.filter(p => p.shift === 'close').length;
 
       let neededShift: ShiftType;
       if (openCount === 0) neededShift = 'open';
@@ -159,19 +181,21 @@ export function generateSchedule(year: number, month: number, people: Person[]):
       dayAssignment.people.push({
         personId: person.id,
         personName: person.name,
-        shift: neededShift
+        shift: neededShift,
+        isHalf: false
       });
     }
 
     // 생성 결과(해당 날짜)가 규칙을 만족하는지 즉시 검증
-    const openCount = dayAssignment.people.filter(p => p.shift === 'open').length;
-    const closeCount = dayAssignment.people.filter(p => p.shift === 'close').length;
-    const totalCount = dayAssignment.people.length;
+    const fullPeopleAfter = dayAssignment.people.filter(p => !p.isHalf);
+    const openCount = fullPeopleAfter.filter(p => p.shift === 'open').length;
+    const closeCount = fullPeopleAfter.filter(p => p.shift === 'close').length;
+    const totalCount = fullPeopleAfter.length;
 
-    if (totalCount !== rules.DAILY_STAFF) {
+    if (totalCount !== requiredStaff) {
       generationErrors.push({
         type: 'insufficient-staff',
-        message: `${date}일: 배정된 인원이 ${totalCount}명입니다. (필요: ${rules.DAILY_STAFF}명)`
+        message: `${date}일: 배정된 풀근무 인원이 ${totalCount}명입니다. (필요: ${requiredStaff}명)`
       });
     }
     if (openCount === 0) {
@@ -199,6 +223,12 @@ export function generateSchedule(year: number, month: number, people: Person[]):
         });
         return;
       }
+      if (!assigned.isHalf) {
+        generationErrors.push({
+          type: 'half-not-marked',
+          message: `${date}일: ${person.name}님의 하프 요청이 풀근무로 배정되었습니다.`
+        });
+      }
       if (assigned.shift !== requestedShift) {
         generationErrors.push({
           type: 'half-shift-mismatch',
@@ -219,6 +249,7 @@ export function generateSchedule(year: number, month: number, people: Person[]):
     year,
     month,
     people,
+    dailyStaffByDate,
     assignments,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -245,14 +276,22 @@ export function exportSchedulesToExcelCsv(schedules: Schedule[]): void {
     for (let day = 1; day <= daysInMonth; day++) {
       const assignment = schedule.assignments.find(a => a.date === day);
       const assignedByPersonId = new Map<string, ShiftType>();
+      const isHalfByPersonId = new Map<string, boolean>();
       if (assignment) {
         assignment.people.forEach(p => {
           assignedByPersonId.set(p.personId, p.shift);
+          isHalfByPersonId.set(p.personId, !!p.isHalf);
         });
       }
 
       const perPerson = schedule.people.map(p => {
         const shift = assignedByPersonId.get(p.id);
+        const isHalf = isHalfByPersonId.get(p.id) === true;
+        if (shift && isHalf) {
+          if (shift === 'open') return '하프-오픈';
+          if (shift === 'middle') return '하프-미들';
+          return '하프-마감';
+        }
         if (shift === 'open') return '오픈';
         if (shift === 'middle') return '미들';
         if (shift === 'close') return '마감';
@@ -292,12 +331,22 @@ export function exportSchedulesToXlsx(schedules: Schedule[]): void {
     for (let day = 1; day <= daysInMonth; day++) {
       const assignment = schedule.assignments.find(a => a.date === day);
       const assignedByPersonId = new Map<string, ShiftType>();
+      const isHalfByPersonId = new Map<string, boolean>();
       if (assignment) {
-        assignment.people.forEach(p => assignedByPersonId.set(p.personId, p.shift));
+        assignment.people.forEach(p => {
+          assignedByPersonId.set(p.personId, p.shift);
+          isHalfByPersonId.set(p.personId, !!p.isHalf);
+        });
       }
 
       const row = [day.toString(), ...schedule.people.map(p => {
         const shift = assignedByPersonId.get(p.id);
+        const isHalf = isHalfByPersonId.get(p.id) === true;
+        if (shift && isHalf) {
+          if (shift === 'open') return '하프-오픈';
+          if (shift === 'middle') return '하프-미들';
+          return '하프-마감';
+        }
         if (shift === 'open') return '오픈';
         if (shift === 'middle') return '미들';
         if (shift === 'close') return '마감';

@@ -4,7 +4,8 @@ import { getWorkRules } from './workRules';
 export function validateScheduleInputs(
   year: number,
   month: number,
-  people: Person[]
+  people: Person[],
+  dailyStaffByDate: Record<number, number> = {}
 ): ValidationError[] {
   const errors: ValidationError[] = [];
   const rules = getWorkRules();
@@ -53,12 +54,13 @@ export function validateScheduleInputs(
     // 오픈/마감 필수인 사람은 하프 요청이 해당 시프트와 충돌하면 안 됨
     halfDays.forEach(day => {
       const shift = person.halfRequests[day];
-      if (person.mustOpen && shift !== 'open') {
-        errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}은 오픈 필수인데 ${day}일 하프가 오픈이 아닙니다.` });
+      if (person.mustOpen || person.mustClose) {
+        errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}은 오픈/마감 필수 설정이 있어 하프를 선택할 수 없습니다. (${day}일)` });
+        return;
       }
-      if (person.mustClose && shift !== 'close') {
-        errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}은 마감 필수인데 ${day}일 하프가 마감이 아닙니다.` });
-      }
+
+      // (방어적) 필수 플래그가 없다면 추가 충돌 규칙은 없음
+      void shift;
     });
   });
 
@@ -96,26 +98,30 @@ export function validateScheduleInputs(
   const hasMustClose = mustClosePeople.length > 0;
   
   for (let date = 1; date <= daysInMonth; date++) {
-    const availableForDay = people.filter(p => !p.requestedDaysOff.includes(date));
+    const requiredStaff = dailyStaffByDate[date] ?? rules.DAILY_STAFF;
 
-    // 해당 날짜에 고정된 하프 요청 인원 수 체크
-    const fixedHalfCount = people.filter(p => p.halfRequests[date] !== undefined).length;
-    if (fixedHalfCount > rules.DAILY_STAFF) {
+    // 풀근무 인원(=근무 인원으로 인정) 후보: 휴무가 아니고, 하프도 아닌 사람
+    const availableFullForDay = people.filter(p => !p.requestedDaysOff.includes(date) && p.halfRequests?.[date] === undefined);
+
+    // 해당 날짜에 고정된 하프 요청 인원 수 체크(하프는 근무 인원으로 미포함)
+    const fixedHalfCount = people.filter(p => p.halfRequests?.[date] !== undefined).length;
+    if (fixedHalfCount > 0 && availableFullForDay.length === 0) {
+      // 풀근무 후보가 없으면 반드시 실패하므로 미리 알려줌
       errors.push({
         type: 'insufficient',
-        message: `${date}일: 하프 요청 인원이 ${fixedHalfCount}명으로 1일 근무 인원(${rules.DAILY_STAFF}명)을 초과합니다.`
+        message: `${date}일: 하프 요청 인원이 ${fixedHalfCount}명이고 풀근무 가능한 인원이 없습니다.`
       });
     }
     
-    if (availableForDay.length < rules.DAILY_STAFF) {
+    if (availableFullForDay.length < requiredStaff) {
       errors.push({
         type: 'insufficient',
-        message: `${date}일: 근무 가능한 인원이 ${availableForDay.length}명으로 부족합니다. (필요: ${rules.DAILY_STAFF}명)`
+        message: `${date}일: 풀근무 가능한 인원이 ${availableFullForDay.length}명으로 부족합니다. (필요: ${requiredStaff}명)`
       });
     }
     
-    const canOpenOnDay = availableForDay.filter(p => p.canOpen).length;
-    const canCloseOnDay = availableForDay.filter(p => p.canClose).length;
+    const canOpenOnDay = availableFullForDay.filter(p => p.canOpen).length;
+    const canCloseOnDay = availableFullForDay.filter(p => p.canClose).length;
     
     if (canOpenOnDay === 0) {
       errors.push({ type: 'no-opener', message: `${date}일: 오픈 가능한 인원이 없습니다.` });
@@ -126,14 +132,14 @@ export function validateScheduleInputs(
     
     // 필수 인원이 설정되어 있다면, 해당 날짜에 필수 인원 중 최소 1명이 가능한지 확인
     if (hasMustOpen) {
-      const mustOpenAvailable = availableForDay.filter(p => p.mustOpen && p.canOpen).length;
+      const mustOpenAvailable = availableFullForDay.filter(p => p.mustOpen && p.canOpen).length;
       if (mustOpenAvailable === 0) {
         errors.push({ type: 'no-must-opener', message: `${date}일: 오픈 필수 인원이 모두 휴무입니다.` });
       }
     }
     
     if (hasMustClose) {
-      const mustCloseAvailable = availableForDay.filter(p => p.mustClose && p.canClose).length;
+      const mustCloseAvailable = availableFullForDay.filter(p => p.mustClose && p.canClose).length;
       if (mustCloseAvailable === 0) {
         errors.push({ type: 'no-must-closer', message: `${date}일: 마감 필수 인원이 모두 휴무입니다.` });
       }

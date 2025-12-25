@@ -9,8 +9,15 @@ import { Person, Schedule, ShiftType, ValidationError } from '../types';
 import { validateScheduleInputs, getDaysInMonth } from '../validator';
 import { generateSchedule, validateGeneratedSchedule, ScheduleGenerationError, exportSchedulesToXlsx } from '../generator';
 import { saveSchedule } from '../storage';
+import { getWorkRules } from '../workRules';
 
 type RequestMode = 'off' | 'half';
+
+type DayRequestSummary = {
+  key: string;
+  text: string;
+  kind: 'off' | 'half';
+};
 
 export function CreateSchedulePage() {
   const navigate = useNavigate();
@@ -26,6 +33,9 @@ export function CreateSchedulePage() {
   const [confirmed, setConfirmed] = useState(false);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [requestMode, setRequestMode] = useState<RequestMode>('off');
+  const [dailyStaffByDate, setDailyStaffByDate] = useState<Record<number, number>>({});
+
+  const rules = getWorkRules();
 
   // 인원 수 변경 시 배열 초기화
   const handlePeopleCountChange = (count: string) => {
@@ -55,11 +65,11 @@ export function CreateSchedulePage() {
   };
 
   // 개별 인원 정보 업데이트
-  const updatePerson = (index: number, updates: Partial<Person>) => {
+  const updatePerson = (index: number, updates: Partial<Person>, resetConfirm = true) => {
     const newPeople = [...people];
     newPeople[index] = { ...newPeople[index], ...updates };
     setPeople(newPeople);
-    setConfirmed(false);
+    if (resetConfirm) setConfirmed(false);
   };
 
   const canConfirm = people.length > 0 && people.every((p: Person) => p.name.trim().length > 0);
@@ -93,7 +103,7 @@ export function CreateSchedulePage() {
         delete newHalfRequests[day];
       }
 
-      updatePerson(personIndex, { requestedDaysOff: newDaysOff, halfRequests: newHalfRequests });
+      updatePerson(personIndex, { requestedDaysOff: newDaysOff, halfRequests: newHalfRequests }, false);
       return;
     }
 
@@ -105,7 +115,7 @@ export function CreateSchedulePage() {
       newHalfRequests[day] = 'middle';
     }
     const newDaysOff = person.requestedDaysOff.filter((d: number) => d !== day);
-    updatePerson(personIndex, { requestedDaysOff: newDaysOff, halfRequests: newHalfRequests });
+    updatePerson(personIndex, { requestedDaysOff: newDaysOff, halfRequests: newHalfRequests }, false);
   };
 
   const setHalfShiftForSelected = (day: number, shift: ShiftType) => {
@@ -113,12 +123,24 @@ export function CreateSchedulePage() {
     if (personIndex === -1) return;
     const person = people[personIndex];
     if (person.halfRequests[day] === undefined) return;
-    updatePerson(personIndex, { halfRequests: { ...person.halfRequests, [day]: shift } });
+    updatePerson(personIndex, { halfRequests: { ...person.halfRequests, [day]: shift } }, false);
+  };
+
+  const toggleDailyStaff3 = (day: number) => {
+    setDailyStaffByDate((prev: Record<number, number>) => {
+      const current = prev[day];
+      if (current === 3) {
+        const next = { ...prev };
+        delete next[day];
+        return next;
+      }
+      return { ...prev, [day]: 3 };
+    });
   };
 
   // 스케줄 생성
   const handleGenerate = () => {
-    const validationErrors = validateScheduleInputs(year, month, people);
+    const validationErrors = validateScheduleInputs(year, month, people, dailyStaffByDate);
     
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
@@ -127,7 +149,7 @@ export function CreateSchedulePage() {
     }
 
     try {
-      const newSchedule = generateSchedule(year, month, people);
+      const newSchedule = generateSchedule(year, month, people, dailyStaffByDate);
 
       // 생성된 스케줄 검증(방어적)
       const generationErrors = validateGeneratedSchedule(newSchedule);
@@ -192,6 +214,8 @@ export function CreateSchedulePage() {
           const middlePeople = assignment ? assignment.people.filter(p => p.shift === 'middle') : [];
           const closePeople = assignment ? assignment.people.filter(p => p.shift === 'close') : [];
 
+          const formatAssignedName = (personName: string, isHalf?: boolean) => (isHalf ? `${personName}(하프)` : personName);
+
           const dateObj = new Date(s.year, s.month - 1, dayNum);
           const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
 
@@ -201,15 +225,15 @@ export function CreateSchedulePage() {
               <div className="calendar-date">{dayNum}</div>
               <div className="calendar-line">
                 <span className="calendar-label">오픈</span>
-                <span>{openPeople.map(p => p.personName).join(', ') || '-'}</span>
+                <span>{openPeople.map(p => formatAssignedName(p.personName, p.isHalf)).join(', ') || '-'}</span>
               </div>
               <div className="calendar-line">
                 <span className="calendar-label">미들</span>
-                <span>{middlePeople.map(p => p.personName).join(', ') || '-'}</span>
+                <span>{middlePeople.map(p => formatAssignedName(p.personName, p.isHalf)).join(', ') || '-'}</span>
               </div>
               <div className="calendar-line">
                 <span className="calendar-label">마감</span>
-                <span>{closePeople.map(p => p.personName).join(', ') || '-'}</span>
+                <span>{closePeople.map(p => formatAssignedName(p.personName, p.isHalf)).join(', ') || '-'}</span>
               </div>
             </div>
           );
@@ -250,6 +274,22 @@ export function CreateSchedulePage() {
           const isHalf = !!person && person.halfRequests[dayNum] !== undefined;
           const halfShift = person ? person.halfRequests[dayNum] : undefined;
 
+          const staffForDay = dailyStaffByDate[dayNum] ?? rules.DAILY_STAFF;
+
+          const summaries: DayRequestSummary[] = people
+            .map((p: Person) => {
+              if (p.requestedDaysOff.includes(dayNum)) {
+                return { key: `${p.id}-off`, text: `(${p.name}/휴무)`, kind: 'off' as const };
+              }
+              const hs = p.halfRequests?.[dayNum];
+              if (hs !== undefined) {
+                const hsLabel = hs === 'open' ? '오픈' : hs === 'middle' ? '미들' : '마감';
+                return { key: `${p.id}-half`, text: `(${p.name}/하프/${hsLabel})`, kind: 'half' as const };
+              }
+              return null;
+            })
+            .filter((v: DayRequestSummary | null): v is DayRequestSummary => v !== null);
+
           return (
             <div
               key={dayNum}
@@ -261,7 +301,27 @@ export function CreateSchedulePage() {
                 if (e.key === 'Enter' || e.key === ' ') toggleCalendarDayForSelected(dayNum);
               }}
             >
-              <div className="calendar-date">{dayNum}</div>
+              <div className="request-day-top">
+                <div className="calendar-date">{dayNum}</div>
+                <button
+                  type="button"
+                  className="staff-toggle"
+                  onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                    e.stopPropagation();
+                    toggleDailyStaff3(dayNum);
+                  }}
+                >
+                  {staffForDay}인
+                </button>
+              </div>
+
+              {summaries.length > 0 && (
+                <div className="request-summaries" onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
+                  {summaries.map((s: DayRequestSummary) => (
+                    <div key={s.key} className={`request-summary ${s.kind}`}> {s.text} </div>
+                  ))}
+                </div>
+              )}
 
               {isHalf && (
                 <div className="half-shift-buttons" onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}>

@@ -6,7 +6,7 @@ export type WorkRules = {
 };
 
 export const DEFAULT_WORK_RULES: WorkRules = {
-  DAILY_STAFF: 3,
+  DAILY_STAFF: 2,
   WORK_HOURS: 8,
   BREAK_HOURS: 1
 };

@@ -20,6 +20,7 @@ export interface DayAssignment {
     personId: string;
     personName: string;
     shift: ShiftType;
+    isHalf?: boolean;
   }[];
 }
 
@@ -29,6 +30,7 @@ export interface Schedule {
   year: number;
   month: number;
   people: Person[];
+  dailyStaffByDate?: Record<number, number>;
   assignments: DayAssignment[];
   createdAt: string;
   updatedAt: string;

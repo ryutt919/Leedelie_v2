@@ -70,6 +70,8 @@ export function ManageSchedulesPage() {
           const middlePeople = assignment ? assignment.people.filter(p => p.shift === 'middle') : [];
           const closePeople = assignment ? assignment.people.filter(p => p.shift === 'close') : [];
 
+          const formatAssignedName = (personName: string, isHalf?: boolean) => (isHalf ? `${personName}(하프)` : personName);
+
           const dateObj = new Date(s.year, s.month - 1, dayNum);
           const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
 
@@ -78,15 +80,15 @@ export function ManageSchedulesPage() {
               <div className="calendar-date">{dayNum}</div>
               <div className="calendar-line">
                 <span className="calendar-label">오픈</span>
-                <span>{openPeople.map(p => p.personName).join(', ') || '-'}</span>
+                <span>{openPeople.map(p => formatAssignedName(p.personName, p.isHalf)).join(', ') || '-'}</span>
               </div>
               <div className="calendar-line">
                 <span className="calendar-label">미들</span>
-                <span>{middlePeople.map(p => p.personName).join(', ') || '-'}</span>
+                <span>{middlePeople.map(p => formatAssignedName(p.personName, p.isHalf)).join(', ') || '-'}</span>
               </div>
               <div className="calendar-line">
                 <span className="calendar-label">마감</span>
-                <span>{closePeople.map(p => p.personName).join(', ') || '-'}</span>
+                <span>{closePeople.map(p => formatAssignedName(p.personName, p.isHalf)).join(', ') || '-'}</span>
               </div>
             </div>
           );
