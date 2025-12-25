@@ -11,6 +11,9 @@ export interface Person {
   mustOpen: boolean;
   mustClose: boolean;
   preferredShift: ShiftType;
+  openPriority?: number;  // 오픈 우선순위 (1~총직원수)
+  middlePriority?: number;  // 미들 우선순위 (1~총직원수)
+  closePriority?: number;  // 마감 우선순위 (1~총직원수)
   requestedDaysOff: number[];
   halfRequests: Record<number, ShiftType>;
 }
@@ -54,4 +57,7 @@ export interface StaffConfig {
   mustOpen?: boolean;
   mustClose?: boolean;
   preferredShift?: ShiftType | null;
+  openPriority?: number;
+  middlePriority?: number;
+  closePriority?: number;
 }

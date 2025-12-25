@@ -127,6 +127,33 @@ export function validateScheduleInputs(
       // (방어적) 필수 플래그가 없다면 추가 충돌 규칙은 없음
       void shift;
     });
+
+    // 우선순위 검증
+    const totalPeople = people.length;
+    if (person.openPriority !== undefined) {
+      if (person.openPriority < 1 || person.openPriority > totalPeople) {
+        errors.push({ type: 'priority', message: `${person.name || `${index + 1}번째 인원`}의 오픈 우선순위는 1~${totalPeople} 사이여야 합니다.` });
+      }
+      if (!person.canOpen) {
+        errors.push({ type: 'priority', message: `${person.name || `${index + 1}번째 인원`}은 오픈 근무가 불가능하므로 오픈 우선순위를 설정할 수 없습니다.` });
+      }
+    }
+    if (person.middlePriority !== undefined) {
+      if (person.middlePriority < 1 || person.middlePriority > totalPeople) {
+        errors.push({ type: 'priority', message: `${person.name || `${index + 1}번째 인원`}의 미들 우선순위는 1~${totalPeople} 사이여야 합니다.` });
+      }
+      if (!person.canMiddle) {
+        errors.push({ type: 'priority', message: `${person.name || `${index + 1}번째 인원`}은 미들 근무가 불가능하므로 미들 우선순위를 설정할 수 없습니다.` });
+      }
+    }
+    if (person.closePriority !== undefined) {
+      if (person.closePriority < 1 || person.closePriority > totalPeople) {
+        errors.push({ type: 'priority', message: `${person.name || `${index + 1}번째 인원`}의 마감 우선순위는 1~${totalPeople} 사이여야 합니다.` });
+      }
+      if (!person.canClose) {
+        errors.push({ type: 'priority', message: `${person.name || `${index + 1}번째 인원`}은 마감 근무가 불가능하므로 마감 우선순위를 설정할 수 없습니다.` });
+      }
+    }
   });
 
   // 오픈/마감 가능 인원 검증

@@ -137,6 +137,24 @@ export function generateSchedule(
   const toHalfUnits = (value: number): number => Math.round(value * 2);
 
   const pickPreferred = (candidates: Person[], shift: ShiftType): number => {
+    // \uc6b0\uc120\uc21c\uc704\uac00 \uc124\uc815\ub41c \uc0ac\ub78c\uc744 \uba3c\uc800 \ucc3e\uc74c
+    const getPriority = (p: Person): number | undefined => {
+      if (shift === 'open') return p.openPriority;
+      if (shift === 'middle') return p.middlePriority;
+      return p.closePriority;
+    };
+
+    // \uc6b0\uc120\uc21c\uc704\uac00 \uc788\ub294 \ud6c4\ubcf4\ub4e4 \ucc3e\uae30
+    const withPriority = candidates
+      .map((p, idx) => ({ person: p, index: idx, priority: getPriority(p) }))
+      .filter(item => item.priority !== undefined)
+      .sort((a, b) => a.priority! - b.priority!); // \ub0ae\uc740 \uc22b\uc790\uac00 \ub192\uc740 \uc6b0\uc120\uc21c\uc704
+
+    if (withPriority.length > 0) {
+      return withPriority[0].index;
+    }
+
+    // \uc6b0\uc120\uc21c\uc704\uac00 \uc5c6\uc73c\uba74 \uc120\ud638 \uc2dc\ud504\ud2b8\ub85c \uc120\ud0dd
     const preferredIndex = candidates.findIndex(p => p.preferredShift === shift);
     return preferredIndex >= 0 ? preferredIndex : 0;
   };

@@ -18,6 +18,10 @@ function normalizePerson(raw: Person): Person {
       ? preferredShiftRaw
       : 'middle';
 
+  const openPriority = typeof raw.openPriority === 'number' ? raw.openPriority : undefined;
+  const middlePriority = typeof raw.middlePriority === 'number' ? raw.middlePriority : undefined;
+  const closePriority = typeof raw.closePriority === 'number' ? raw.closePriority : undefined;
+
   return {
     ...raw,
     canOpen,
@@ -27,7 +31,10 @@ function normalizePerson(raw: Person): Person {
     mustClose,
     preferredShift,
     requestedDaysOff,
-    halfRequests
+    halfRequests,
+    openPriority,
+    middlePriority,
+    closePriority
   };
 }
 
@@ -40,6 +47,9 @@ function normalizeStaffConfig(raw: any): StaffConfig {
   const mustOpen = typeof raw?.mustOpen === 'boolean' ? raw.mustOpen : undefined;
   const mustClose = typeof raw?.mustClose === 'boolean' ? raw.mustClose : undefined;
   const preferredShift = raw?.preferredShift === 'open' || raw?.preferredShift === 'middle' || raw?.preferredShift === 'close' ? raw.preferredShift : null;
+  const openPriority = typeof raw?.openPriority === 'number' ? raw.openPriority : undefined;
+  const middlePriority = typeof raw?.middlePriority === 'number' ? raw.middlePriority : undefined;
+  const closePriority = typeof raw?.closePriority === 'number' ? raw.closePriority : undefined;
 
   return {
     id,
@@ -49,7 +59,10 @@ function normalizeStaffConfig(raw: any): StaffConfig {
     canClose,
     mustOpen,
     mustClose,
-    preferredShift
+    preferredShift,
+    openPriority,
+    middlePriority,
+    closePriority
   };
 }
 

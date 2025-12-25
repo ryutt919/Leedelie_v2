@@ -77,6 +77,9 @@ export function CreateSchedulePage() {
         mustOpen: c.mustOpen ?? false,
         mustClose: c.mustClose ?? false,
         preferredShift: (c.preferredShift as ShiftType) ?? 'middle',
+        openPriority: c.openPriority,
+        middlePriority: c.middlePriority,
+        closePriority: c.closePriority,
         requestedDaysOff: [],
         halfRequests: {}
       }));
@@ -196,7 +199,10 @@ export function CreateSchedulePage() {
       canClose: p.canClose,
       mustOpen: p.mustOpen || undefined,
       mustClose: p.mustClose || undefined,
-      preferredShift: p.preferredShift ?? null
+      preferredShift: p.preferredShift ?? null,
+      openPriority: p.openPriority,
+      middlePriority: p.middlePriority,
+      closePriority: p.closePriority
     }));
     saveStaffConfig(configs);
     alert('직원 구성이 저장되었습니다.');
@@ -218,6 +224,9 @@ export function CreateSchedulePage() {
       mustOpen: c.mustOpen ?? false,
       mustClose: c.mustClose ?? false,
       preferredShift: (c.preferredShift as ShiftType) ?? 'middle',
+      openPriority: c.openPriority,
+      middlePriority: c.middlePriority,
+      closePriority: c.closePriority,
       requestedDaysOff: [],
       halfRequests: {}
     }));
@@ -583,6 +592,41 @@ export function CreateSchedulePage() {
                   onChange={(v) => updatePerson(index, { mustClose: v })}
                   label="마감 필수"
                 />
+              </div>
+
+              <div style={{ marginTop: '1rem' }}>
+                <h5 style={{ marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  시프트 우선순위 (선택, 1~{peopleCount})
+                </h5>
+                <div className="form-row">
+                  <Input
+                    label="오픈 우선순위"
+                    type="number"
+                    value={person.openPriority?.toString() ?? ''}
+                    onChange={(v) => updatePerson(index, { openPriority: v ? parseInt(v) : undefined })}
+                    placeholder="미설정"
+                    min={1}
+                    max={peopleCount}
+                  />
+                  <Input
+                    label="미들 우선순위"
+                    type="number"
+                    value={person.middlePriority?.toString() ?? ''}
+                    onChange={(v) => updatePerson(index, { middlePriority: v ? parseInt(v) : undefined })}
+                    placeholder="미설정"
+                    min={1}
+                    max={peopleCount}
+                  />
+                  <Input
+                    label="마감 우선순위"
+                    type="number"
+                    value={person.closePriority?.toString() ?? ''}
+                    onChange={(v) => updatePerson(index, { closePriority: v ? parseInt(v) : undefined })}
+                    placeholder="미설정"
+                    min={1}
+                    max={peopleCount}
+                  />
+                </div>
               </div>
             </div>
           ))}

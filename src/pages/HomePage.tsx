@@ -2,12 +2,11 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
-import type { WorkRules, ShiftType } from '../constants';
+import type { WorkRules } from '../constants';
 import { getWorkRules, saveWorkRules } from '../workRules';
 
 export function HomePage() {
   const [rules, setRules] = useState<WorkRules>(getWorkRules());
-  const [shiftPriorityInput, setShiftPriorityInput] = useState<string>('');
 
   useEffect(() => {
     setRules(getWorkRules());
@@ -36,38 +35,6 @@ export function HomePage() {
 
     saveWorkRules(rules);
     alert('근무 규칙이 저장되었습니다.');
-  };
-
-  const handleSetShiftPriority = (headcount: number) => {
-    if (!shiftPriorityInput.trim()) {
-      alert('우선순위를 입력해주세요. (쉼표로 구분: 예: open,close,middle)');
-      return;
-    }
-
-    const shifts = shiftPriorityInput.split(',').map(s => s.trim().toLowerCase()) as ShiftType[];
-    const validShifts = ['open', 'middle', 'close'];
-    
-    if (!shifts.every(s => validShifts.includes(s))) {
-      alert('유효하지 않은 시프트입니다. (open, middle, close만 허용)');
-      return;
-    }
-
-    if (shifts.length !== new Set(shifts).size) {
-      alert('중복된 시프트가 있습니다.');
-      return;
-    }
-
-    const newPriority = { ...rules.SHIFT_PRIORITY || {} };
-    newPriority[headcount] = shifts;
-
-    setRules({ ...rules, SHIFT_PRIORITY: newPriority });
-    setShiftPriorityInput('');
-  };
-
-  const handleDeleteShiftPriority = (headcount: number) => {
-    const newPriority = { ...rules.SHIFT_PRIORITY || {} };
-    delete newPriority[headcount];
-    setRules({ ...rules, SHIFT_PRIORITY: Object.keys(newPriority).length > 0 ? newPriority : undefined });
   };
 
   return (
@@ -144,69 +111,6 @@ export function HomePage() {
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="subsection-title">오픈/미들/마감 우선순위</div>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            근무 인원 수에 따라 시프트 배정 우선순위를 설정할 수 있습니다. (선택사항)
-          </p>
-          
-          <div className="form-row">
-            <div className="input-group">
-              <label>인원 수</label>
-              <select className="select" id="shift-headcount">
-                <option value="">선택...</option>
-                {Array.from({ length: Math.floor(rules.DAILY_STAFF_MAX) + 2 }, (_, i) => i + 1).map(n => (
-                  <option key={n} value={n}>{n}명</option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <label>우선순위 (쉼표 구분)</label>
-              <input
-                className="input"
-                type="text"
-                placeholder="예: open,close,middle"
-                value={shiftPriorityInput}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setShiftPriorityInput(e.target.value)}
-              />
-            </div>
-            <div className="input-group" style={{ justifyContent: 'flex-end' }}>
-              <Button 
-                variant="secondary" 
-                onClick={() => {
-                  const headcount = parseInt((document.getElementById('shift-headcount') as HTMLSelectElement).value);
-                  if (!headcount) {
-                    alert('인원 수를 선택해주세요.');
-                    return;
-                  }
-                  handleSetShiftPriority(headcount);
-                }}
-              >
-                설정
-              </Button>
-            </div>
-          </div>
-
-          {rules.SHIFT_PRIORITY && Object.entries(rules.SHIFT_PRIORITY).length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>설정된 우선순위:</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {Object.entries(rules.SHIFT_PRIORITY).map(([headcount, shifts]) => (
-                  <div key={headcount} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', backgroundColor: 'var(--bg)', borderRadius: '6px' }}>
-                    <span>{headcount}명: {shifts.join(' → ')}</span>
-                    <Button 
-                      variant="danger" 
-                      onClick={() => handleDeleteShiftPriority(parseInt(headcount))}
-                    >
-                      삭제
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="actions">

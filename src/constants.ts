@@ -1,8 +1,5 @@
 import { ShiftType } from './types';
 
-// ShiftType re-export
-export type { ShiftType };
-
 // 근무 규칙
 export type WorkRules = {
   DAILY_STAFF_BASE: number;
