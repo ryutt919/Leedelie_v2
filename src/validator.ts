@@ -1,4 +1,4 @@
-import { Person, ValidationError } from './types';
+import { Person, ValidationError, ShiftType } from './types';
 import { getWorkRules } from './workRules';
 
 export function validateScheduleInputs(
