@@ -7,7 +7,6 @@ import { Person, Schedule } from '../types';
 import { loadSchedules, deleteSchedule } from '../storage';
 import { exportSchedulesToXlsx } from '../generator';
 import { getDaysInMonth } from '../validator';
-import { getWorkRules } from '../workRules';
 
 export function ManageSchedulesPage() {
   const navigate = useNavigate();
@@ -42,7 +41,6 @@ export function ManageSchedulesPage() {
   };
 
   const renderCalendar = (s: Schedule) => {
-    const rules = getWorkRules();
     const daysInMonth = getDaysInMonth(s.year, s.month);
     const firstWeekday = new Date(s.year, s.month - 1, 1).getDay();
     const totalCells = firstWeekday + daysInMonth;
@@ -78,11 +76,11 @@ export function ManageSchedulesPage() {
             <div key={dayNum} className={`calendar-cell ${isWeekend ? 'weekend' : ''}`}>
               <div className="calendar-date">{dayNum}</div>
               <div className="calendar-line">
-                <span className="calendar-label">오픈 ({rules.OPEN_TIME})</span>
+                <span className="calendar-label">오픈</span>
                 <span>{openPeople.map(p => p.personName).join(', ') || '-'}</span>
               </div>
               <div className="calendar-line">
-                <span className="calendar-label">마감 ({rules.CLOSE_TIME})</span>
+                <span className="calendar-label">마감</span>
                 <span>{closePeople.map(p => p.personName).join(', ') || '-'}</span>
               </div>
             </div>

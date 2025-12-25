@@ -9,7 +9,6 @@ import { Person, Schedule, ValidationError } from '../types';
 import { validateScheduleInputs, getDaysInMonth } from '../validator';
 import { generateSchedule, validateGeneratedSchedule, ScheduleGenerationError, exportSchedulesToXlsx } from '../generator';
 import { saveSchedule } from '../storage';
-import { getWorkRules } from '../workRules';
 
 export function CreateSchedulePage() {
   const navigate = useNavigate();
@@ -112,7 +111,6 @@ export function CreateSchedulePage() {
   };
 
   const renderCalendar = (s: Schedule) => {
-    const rules = getWorkRules();
     const firstWeekday = new Date(s.year, s.month - 1, 1).getDay();
     const totalCells = firstWeekday + daysInMonth;
     const weekCount = Math.ceil(totalCells / 7);
@@ -147,11 +145,11 @@ export function CreateSchedulePage() {
             >
               <div className="calendar-date">{dayNum}</div>
               <div className="calendar-line">
-                <span className="calendar-label">오픈 ({rules.OPEN_TIME})</span>
+                <span className="calendar-label">오픈</span>
                 <span>{openPeople.map(p => p.personName).join(', ') || '-'}</span>
               </div>
               <div className="calendar-line">
-                <span className="calendar-label">마감 ({rules.CLOSE_TIME})</span>
+                <span className="calendar-label">마감</span>
                 <span>{closePeople.map(p => p.personName).join(', ') || '-'}</span>
               </div>
             </div>

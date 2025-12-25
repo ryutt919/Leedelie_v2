@@ -1,15 +1,11 @@
 // 근무 규칙
 export type WorkRules = {
-  OPEN_TIME: string;
-  CLOSE_TIME: string;
   DAILY_STAFF: number;
   WORK_HOURS: number;
   BREAK_HOURS: number;
 };
 
 export const DEFAULT_WORK_RULES: WorkRules = {
-  OPEN_TIME: '07:00',
-  CLOSE_TIME: '11:00',
   DAILY_STAFF: 3,
   WORK_HOURS: 8,
   BREAK_HOURS: 1

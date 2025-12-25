@@ -15,8 +15,6 @@ export function getWorkRules(): WorkRules {
     const parsed = JSON.parse(raw) as Partial<WorkRules>;
 
     return {
-      OPEN_TIME: typeof parsed.OPEN_TIME === 'string' ? parsed.OPEN_TIME : DEFAULT_WORK_RULES.OPEN_TIME,
-      CLOSE_TIME: typeof parsed.CLOSE_TIME === 'string' ? parsed.CLOSE_TIME : DEFAULT_WORK_RULES.CLOSE_TIME,
       DAILY_STAFF: typeof parsed.DAILY_STAFF === 'number' ? parsed.DAILY_STAFF : DEFAULT_WORK_RULES.DAILY_STAFF,
       WORK_HOURS: typeof parsed.WORK_HOURS === 'number' ? parsed.WORK_HOURS : DEFAULT_WORK_RULES.WORK_HOURS,
       BREAK_HOURS: typeof parsed.BREAK_HOURS === 'number' ? parsed.BREAK_HOURS : DEFAULT_WORK_RULES.BREAK_HOURS

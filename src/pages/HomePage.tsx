@@ -13,11 +13,6 @@ export function HomePage() {
   }, []);
 
   const handleSaveRules = () => {
-    const timePattern = /^\d{2}:\d{2}$/;
-    if (!timePattern.test(rules.OPEN_TIME) || !timePattern.test(rules.CLOSE_TIME)) {
-      alert('시간 형식은 HH:MM 입니다. 예) 07:00');
-      return;
-    }
     if (!rules.DAILY_STAFF || rules.DAILY_STAFF < 1 || rules.DAILY_STAFF > 20) {
       alert('1일 근무 인원은 1~20 사이로 입력해주세요.');
       return;
@@ -58,24 +53,6 @@ export function HomePage() {
       <div className="info-section">
         <h2>근무 규칙</h2>
         <div className="info-grid">
-          <div className="info-item">
-            <strong>오픈조 출근</strong>
-            <input
-              className="input"
-              type="time"
-              value={rules.OPEN_TIME}
-              onChange={(e) => setRules({ ...rules, OPEN_TIME: e.target.value })}
-            />
-          </div>
-          <div className="info-item">
-            <strong>마감조 출근</strong>
-            <input
-              className="input"
-              type="time"
-              value={rules.CLOSE_TIME}
-              onChange={(e) => setRules({ ...rules, CLOSE_TIME: e.target.value })}
-            />
-          </div>
           <div className="info-item">
             <strong>1일 근무 인원</strong>
             <input
