@@ -342,6 +342,7 @@ export function PrepManagementPage() {
                 <label>보충 날짜 추가</label>
                 <Input
                   type="date"
+                  value=""
                   onChange={(e) => {
                     if (e.target.value) {
                       const newHistory = [...editingPrep.replenishHistory, e.target.value].sort();
@@ -379,8 +380,8 @@ export function PrepManagementPage() {
                 <label>수량</label>
                 <Input
                   type="number"
-                  min="0"
-                  step="0.01"
+                  min={0}
+                  step={0.01}
                   value={prepIng.quantity}
                   onChange={(e) => handleIngredientChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                 />
@@ -437,6 +438,7 @@ export function PrepManagementPage() {
                         <label style={{ fontSize: '0.875rem' }}>보충 날짜 추가</label>
                         <Input
                           type="date"
+                          value=""
                           onChange={(e) => {
                             if (e.target.value) {
                               handleAddReplenishDate(prep.id, e.target.value);
@@ -507,6 +509,7 @@ export function PrepManagementPage() {
                         <label style={{ fontSize: '0.875rem' }}>보충 날짜 추가</label>
                         <Input
                           type="date"
+                          value=""
                           onChange={(e) => {
                             if (e.target.value) {
                               handleAddReplenishDate(prep.id, e.target.value);

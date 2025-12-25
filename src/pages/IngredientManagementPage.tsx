@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -111,8 +111,8 @@ export function IngredientManagementPage() {
               <label>구매 가격 (원)</label>
               <Input
                 type="number"
-                min="0"
-                step="0.01"
+                min={0}
+                step={0.01}
                 value={editingIngredient.price}
                 onChange={(e) => handleFieldChange('price', parseFloat(e.target.value) || 0)}
               />
@@ -121,8 +121,8 @@ export function IngredientManagementPage() {
               <label>구매 단위</label>
               <Input
                 type="number"
-                min="0.01"
-                step="0.01"
+                min={0.01}
+                step={0.01}
                 value={editingIngredient.purchaseUnit}
                 onChange={(e) => handleFieldChange('purchaseUnit', parseFloat(e.target.value) || 1)}
                 placeholder="예: 1 (1kg, 1개 등)"
