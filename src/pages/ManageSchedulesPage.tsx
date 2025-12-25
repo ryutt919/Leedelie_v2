@@ -5,7 +5,7 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Schedule } from '../types';
 import { loadSchedules, deleteSchedule } from '../storage';
-import { exportToJSON } from '../generator';
+import { exportSchedulesToExcelCsv } from '../generator';
 
 export function ManageSchedulesPage() {
   const navigate = useNavigate();
@@ -36,7 +36,7 @@ export function ManageSchedulesPage() {
       alert('내보낼 스케줄이 없습니다.');
       return;
     }
-    exportToJSON(filtered);
+    exportSchedulesToExcelCsv(filtered);
   };
 
   const getFilteredSchedules = () => {
@@ -86,7 +86,7 @@ export function ManageSchedulesPage() {
         </div>
         <div className="actions">
           <Button onClick={handleExport} variant="secondary">
-            JSON 내보내기
+            엑셀(CSV) 내보내기
           </Button>
         </div>
       </Card>

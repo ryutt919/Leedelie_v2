@@ -164,13 +164,63 @@ export function generateSchedule(year: number, month: number, people: Person[]):
   };
 }
 
-export function exportToJSON(schedules: Schedule[]): void {
-  const dataStr = JSON.stringify(schedules, null, 2);
-  const blob = new Blob([dataStr], { type: 'application/json' });
+function csvEscape(value: string): string {
+  const safe = value.replace(/"/g, '""');
+  return `"${safe}"`;
+}
+
+export function exportSchedulesToExcelCsv(schedules: Schedule[]): void {
+  const header = [
+    'year',
+    'month',
+    'date',
+    'weekday',
+    'open',
+    'close',
+    'all'
+  ];
+
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const rows: string[] = [header.map(csvEscape).join(',')];
+
+  schedules.forEach(schedule => {
+    schedule.assignments.forEach(day => {
+      const dateObj = new Date(schedule.year, schedule.month - 1, day.date);
+      const weekday = dayNames[dateObj.getDay()];
+
+      const openNames = day.people
+        .filter(p => p.shift === 'open')
+        .map(p => p.personName)
+        .join(' / ');
+      const closeNames = day.people
+        .filter(p => p.shift === 'close')
+        .map(p => p.personName)
+        .join(' / ');
+      const allNames = day.people.map(p => `${p.personName}(${p.shift})`).join(' / ');
+
+      rows.push(
+        [
+          String(schedule.year),
+          String(schedule.month),
+          String(day.date),
+          weekday,
+          openNames,
+          closeNames,
+          allNames
+        ].map(csvEscape).join(',')
+      );
+    });
+  });
+
+  // Excel 한글 깨짐 방지용 BOM
+  const bom = '\uFEFF';
+  const csv = bom + rows.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
+
   const link = document.createElement('a');
   link.href = url;
-  link.download = `schedules_${new Date().toISOString().split('T')[0]}.json`;
+  link.download = `leedeli_schedules_${new Date().toISOString().split('T')[0]}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

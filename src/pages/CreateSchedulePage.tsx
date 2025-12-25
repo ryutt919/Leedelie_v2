@@ -7,8 +7,10 @@ import { Select } from '../components/Select';
 import { Checkbox } from '../components/Checkbox';
 import { Person, Schedule, ValidationError } from '../types';
 import { validateScheduleInputs, getDaysInMonth } from '../validator';
-import { generateSchedule, validateGeneratedSchedule, ScheduleGenerationError } from '../generator';
+import { generateSchedule, validateGeneratedSchedule, ScheduleGenerationError, exportSchedulesToExcelCsv } from '../generator';
 import { saveSchedule } from '../storage';
+
+type ScheduleViewMode = 'table' | 'calendar';
 
 export function CreateSchedulePage() {
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ export function CreateSchedulePage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [viewMode, setViewMode] = useState<ScheduleViewMode>('table');
 
   // 인원 수 변경 시 배열 초기화
   const handlePeopleCountChange = (count: string) => {
@@ -57,7 +60,7 @@ export function CreateSchedulePage() {
   const toggleDayOff = (personIndex: number, day: number) => {
     const person = people[personIndex];
     const newDaysOff = person.requestedDaysOff.includes(day)
-      ? person.requestedDaysOff.filter(d => d !== day)
+      ? person.requestedDaysOff.filter((d: number) => d !== day)
       : [...person.requestedDaysOff, day];
     updatePerson(personIndex, { requestedDaysOff: newDaysOff });
   };
@@ -84,6 +87,7 @@ export function CreateSchedulePage() {
       }
 
       setSchedule(newSchedule);
+      setViewMode('table');
       setErrors([]);
     } catch (err) {
       if (err instanceof ScheduleGenerationError) {
@@ -103,6 +107,60 @@ export function CreateSchedulePage() {
       alert('스케줄이 저장되었습니다!');
       navigate('/manage');
     }
+  };
+
+  const handleExportExcel = () => {
+    if (!schedule) return;
+    exportSchedulesToExcelCsv([schedule]);
+  };
+
+  const renderCalendar = (s: Schedule) => {
+    const firstWeekday = new Date(s.year, s.month - 1, 1).getDay();
+    const totalCells = firstWeekday + daysInMonth;
+    const weekCount = Math.ceil(totalCells / 7);
+    const cells = Array.from({ length: weekCount * 7 }, (_, i) => {
+      const dayNum = i - firstWeekday + 1;
+      return dayNum >= 1 && dayNum <= daysInMonth ? dayNum : null;
+    });
+
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+    return (
+      <div className="calendar">
+        {dayNames.map(name => (
+          <div key={name} className="calendar-header">
+            {name}
+          </div>
+        ))}
+        {cells.map((dayNum, idx) => {
+          if (!dayNum) {
+            return <div key={`e-${idx}`} className="calendar-cell empty" />;
+          }
+
+          const assignment = s.assignments.find(a => a.date === dayNum);
+          const openPeople = assignment ? assignment.people.filter(p => p.shift === 'open') : [];
+          const closePeople = assignment ? assignment.people.filter(p => p.shift === 'close') : [];
+
+          const dateObj = new Date(s.year, s.month - 1, dayNum);
+          const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+
+          return (
+            <div key={dayNum} className={`calendar-cell ${isWeekend ? 'weekend' : ''}`}
+            >
+              <div className="calendar-date">{dayNum}</div>
+              <div className="calendar-line">
+                <span className="calendar-label">오픈</span>
+                <span>{openPeople.map(p => p.personName).join(', ') || '-'}</span>
+              </div>
+              <div className="calendar-line">
+                <span className="calendar-label">마감</span>
+                <span>{closePeople.map(p => p.personName).join(', ') || '-'}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const yearOptions = Array.from({ length: 10 }, (_, i) => ({
@@ -261,38 +319,55 @@ export function CreateSchedulePage() {
           </Card>
 
           <Card title={`${schedule.year}년 ${schedule.month}월 스케줄`}>
-          <div className="schedule-table-wrapper">
-            <table className="schedule-table">
-              <thead>
-                <tr>
-                  <th>날짜</th>
-                  <th>요일</th>
-                  <th>오픈조 (07:00)</th>
-                  <th>마감조 (11:00)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {schedule.assignments.map(day => {
-                  const date = new Date(schedule.year, schedule.month - 1, day.date);
-                  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-                  const dayName = dayNames[date.getDay()];
-                  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-                  const openPeople = day.people.filter(p => p.shift === 'open');
-                  const closePeople = day.people.filter(p => p.shift === 'close');
-
-                  return (
-                    <tr key={day.date} className={isWeekend ? 'weekend' : ''}>
-                      <td>{day.date}일</td>
-                      <td>{dayName}</td>
-                      <td>{openPeople.map(p => p.personName).join(', ') || '-'}</td>
-                      <td>{closePeople.map(p => p.personName).join(', ') || '-'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="actions">
+            <Button
+              onClick={() => setViewMode(viewMode === 'table' ? 'calendar' : 'table')}
+              variant="secondary"
+            >
+              {viewMode === 'table' ? '달력형식으로 보기' : '표로 보기'}
+            </Button>
+            <Button onClick={handleExportExcel} variant="secondary">
+              엑셀(CSV) 내보내기
+            </Button>
           </div>
+
+          {viewMode === 'table' ? (
+            <div className="schedule-table-wrapper">
+              <table className="schedule-table">
+                <thead>
+                  <tr>
+                    <th>날짜</th>
+                    <th>요일</th>
+                    <th>오픈조 (07:00)</th>
+                    <th>마감조 (11:00)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedule.assignments.map(day => {
+                    const date = new Date(schedule.year, schedule.month - 1, day.date);
+                    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+                    const dayName = dayNames[date.getDay()];
+                    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+                    const openPeople = day.people.filter(p => p.shift === 'open');
+                    const closePeople = day.people.filter(p => p.shift === 'close');
+
+                    return (
+                      <tr key={day.date} className={isWeekend ? 'weekend' : ''}>
+                        <td>{day.date}일</td>
+                        <td>{dayName}</td>
+                        <td>{openPeople.map(p => p.personName).join(', ') || '-'}</td>
+                        <td>{closePeople.map(p => p.personName).join(', ') || '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="calendar-wrapper">{renderCalendar(schedule)}</div>
+          )}
+
           <div className="actions">
             <Button onClick={handleSave} variant="primary">
               저장하기

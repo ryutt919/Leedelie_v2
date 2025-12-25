@@ -16,7 +16,7 @@ export function HomePage() {
 
         <Card title="스케줄 관리/조회">
           <p>저장된 스케줄을 조회하고 관리합니다.</p>
-          <p>수정, 삭제, JSON 내보내기 등의 기능을 제공합니다.</p>
+          <p>삭제, 엑셀(CSV) 내보내기 등의 기능을 제공합니다.</p>
           <Link to="/manage">
             <Button variant="secondary">관리하기</Button>
           </Link>
