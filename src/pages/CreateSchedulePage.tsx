@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -23,13 +23,15 @@ export function CreateSchedulePage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [requestModes, setRequestModes] = useState<Record<string, RequestMode>>({});
-  const [activeHalfDay, setActiveHalfDay] = useState<Record<string, number | null>>({});
+  const [confirmed, setConfirmed] = useState(false);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [requestMode, setRequestMode] = useState<RequestMode>('off');
 
   // 인원 수 변경 시 배열 초기화
   const handlePeopleCountChange = (count: string) => {
     const num = parseInt(count) || 0;
     setPeopleCount(num);
+    setConfirmed(false);
     
     const newPeople: Person[] = [];
     for (let i = 0; i < num; i++) {
@@ -49,6 +51,7 @@ export function CreateSchedulePage() {
       }
     }
     setPeople(newPeople);
+    setSelectedPersonId(newPeople[0]?.id ?? null);
   };
 
   // 개별 인원 정보 업데이트
@@ -56,20 +59,31 @@ export function CreateSchedulePage() {
     const newPeople = [...people];
     newPeople[index] = { ...newPeople[index], ...updates };
     setPeople(newPeople);
+    setConfirmed(false);
   };
 
-  const getRequestMode = (personId: string): RequestMode => requestModes[personId] ?? 'off';
+  const canConfirm = people.length > 0 && people.every((p: Person) => p.name.trim().length > 0);
 
-  const setRequestMode = (personId: string, mode: RequestMode) => {
-    setRequestModes(prev => ({ ...prev, [personId]: mode }));
+  const handleConfirmPeople = () => {
+    if (!canConfirm) {
+      alert('모든 인원의 이름을 입력해주세요.');
+      return;
+    }
+    setConfirmed(true);
+    setSelectedPersonId((prev: string | null) => prev ?? people[0]?.id ?? null);
   };
 
-  // 휴무/하프 날짜 선택
-  const toggleRequestDay = (personIndex: number, day: number) => {
+  const getSelectedPersonIndex = () => {
+    if (!selectedPersonId) return -1;
+    return people.findIndex((p: Person) => p.id === selectedPersonId);
+  };
+
+  const toggleCalendarDayForSelected = (day: number) => {
+    const personIndex = getSelectedPersonIndex();
+    if (personIndex === -1) return;
     const person = people[personIndex];
-    const mode = getRequestMode(person.id);
 
-    if (mode === 'off') {
+    if (requestMode === 'off') {
       const newDaysOff = person.requestedDaysOff.includes(day)
         ? person.requestedDaysOff.filter((d: number) => d !== day)
         : [...person.requestedDaysOff, day];
@@ -77,50 +91,29 @@ export function CreateSchedulePage() {
       const newHalfRequests = { ...person.halfRequests };
       if (newDaysOff.includes(day)) {
         delete newHalfRequests[day];
-        setActiveHalfDay(prev => (prev[person.id] === day ? { ...prev, [person.id]: null } : prev));
       }
 
-      updatePerson(personIndex, {
-        requestedDaysOff: newDaysOff,
-        halfRequests: newHalfRequests
-      });
+      updatePerson(personIndex, { requestedDaysOff: newDaysOff, halfRequests: newHalfRequests });
       return;
     }
 
     // half 모드
-    const isHalfSelected = person.halfRequests[day] !== undefined;
-    const isActive = activeHalfDay[person.id] === day;
-
-    // 이미 선택된 날짜인데 비활성 상태면, 활성화만 (해제 X)
-    if (isHalfSelected && !isActive) {
-      setActiveHalfDay(prev => ({ ...prev, [person.id]: day }));
-      return;
-    }
-
     const newHalfRequests = { ...person.halfRequests };
-    if (isHalfSelected && isActive) {
-      // 활성 상태에서 한 번 더 누르면 해제
+    if (newHalfRequests[day] !== undefined) {
       delete newHalfRequests[day];
-      setActiveHalfDay(prev => ({ ...prev, [person.id]: null }));
     } else {
-      // 신규 선택 시 기본값은 'middle'
       newHalfRequests[day] = 'middle';
-      setActiveHalfDay(prev => ({ ...prev, [person.id]: day }));
     }
-
-    // 하프 선택 시 동일 날짜 휴무는 제거
-    const newDaysOff = person.requestedDaysOff.filter(d => d !== day);
-
-    updatePerson(personIndex, {
-      requestedDaysOff: newDaysOff,
-      halfRequests: newHalfRequests
-    });
+    const newDaysOff = person.requestedDaysOff.filter((d: number) => d !== day);
+    updatePerson(personIndex, { requestedDaysOff: newDaysOff, halfRequests: newHalfRequests });
   };
 
-  const setHalfShiftForDay = (personIndex: number, day: number, shift: ShiftType) => {
+  const setHalfShiftForSelected = (day: number, shift: ShiftType) => {
+    const personIndex = getSelectedPersonIndex();
+    if (personIndex === -1) return;
     const person = people[personIndex];
-    const newHalfRequests = { ...person.halfRequests, [day]: shift };
-    updatePerson(personIndex, { halfRequests: newHalfRequests });
+    if (person.halfRequests[day] === undefined) return;
+    updatePerson(personIndex, { halfRequests: { ...person.halfRequests, [day]: shift } });
   };
 
   // 스케줄 생성
@@ -225,6 +218,83 @@ export function CreateSchedulePage() {
     );
   };
 
+  const renderRequestCalendar = (yearValue: number, monthValue: number) => {
+    const days = getDaysInMonth(yearValue, monthValue);
+    const firstWeekday = new Date(yearValue, monthValue - 1, 1).getDay();
+    const totalCells = firstWeekday + days;
+    const weekCount = Math.ceil(totalCells / 7);
+    const cells = Array.from({ length: weekCount * 7 }, (_, i) => {
+      const dayNum = i - firstWeekday + 1;
+      return dayNum >= 1 && dayNum <= days ? dayNum : null;
+    });
+
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const personIndex = getSelectedPersonIndex();
+    const person = personIndex >= 0 ? people[personIndex] : null;
+
+    return (
+      <div className="request-calendar">
+        {dayNames.map(name => (
+          <div key={name} className="calendar-header">
+            {name}
+          </div>
+        ))}
+
+        {cells.map((dayNum, idx) => {
+          if (!dayNum) return <div key={`e-${idx}`} className="calendar-cell empty" />;
+
+          const dateObj = new Date(yearValue, monthValue - 1, dayNum);
+          const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+
+          const isOff = !!person && person.requestedDaysOff.includes(dayNum);
+          const isHalf = !!person && person.halfRequests[dayNum] !== undefined;
+          const halfShift = person ? person.halfRequests[dayNum] : undefined;
+
+          return (
+            <div
+              key={dayNum}
+              className={`request-day-cell ${isWeekend ? 'weekend' : ''} ${isOff ? 'selected' : ''} ${isHalf ? 'half-selected' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleCalendarDayForSelected(dayNum)}
+              onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+                if (e.key === 'Enter' || e.key === ' ') toggleCalendarDayForSelected(dayNum);
+              }}
+            >
+              <div className="calendar-date">{dayNum}</div>
+
+              {isHalf && (
+                <div className="half-shift-buttons" onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className={`half-shift-btn ${halfShift === 'open' ? 'active' : ''}`}
+                    onClick={() => setHalfShiftForSelected(dayNum, 'open')}
+                  >
+                    오픈
+                  </button>
+                  <button
+                    type="button"
+                    className={`half-shift-btn ${halfShift === 'middle' ? 'active' : ''}`}
+                    onClick={() => setHalfShiftForSelected(dayNum, 'middle')}
+                  >
+                    미들
+                  </button>
+                  <button
+                    type="button"
+                    className={`half-shift-btn ${halfShift === 'close' ? 'active' : ''}`}
+                    onClick={() => setHalfShiftForSelected(dayNum, 'close')}
+                  >
+                    마감
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const yearOptions = Array.from({ length: 10 }, (_, i) => ({
     value: currentYear + i - 2,
     label: `${currentYear + i - 2}년`
@@ -305,59 +375,56 @@ export function CreateSchedulePage() {
                   label="마감 필수"
                 />
               </div>
-
-              <div className="days-off-selector">
-                <label>휴무/하프 선택</label>
-
-                <div className="request-mode">
-                  <button
-                    type="button"
-                    className={`request-mode-btn ${getRequestMode(person.id) === 'off' ? 'active' : ''}`}
-                    onClick={() => setRequestMode(person.id, 'off')}
-                  >
-                    휴무
-                  </button>
-                  <button
-                    type="button"
-                    className={`request-mode-btn half ${getRequestMode(person.id) === 'half' ? 'active' : ''}`}
-                    onClick={() => setRequestMode(person.id, 'half')}
-                  >
-                    하프
-                  </button>
-                </div>
-
-                <div className="days-grid">
-                  {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
-                    <button
-                      key={day}
-                      type="button"
-                      className={`day-btn ${person.requestedDaysOff.includes(day) ? 'selected' : ''} ${person.halfRequests[day] !== undefined ? 'half-selected' : ''}`}
-                      onClick={() => toggleRequestDay(index, day)}
-                    >
-                      {day}
-                    </button>
-                  ))}
-                </div>
-
-                {getRequestMode(person.id) === 'half' && activeHalfDay[person.id] != null && person.halfRequests[activeHalfDay[person.id] as number] !== undefined && (
-                  <div className="half-shift-picker">
-                    <Select
-                      label={`${activeHalfDay[person.id]}일 하프 타임`}
-                      value={person.halfRequests[activeHalfDay[person.id] as number]}
-                      onChange={(v) => setHalfShiftForDay(index, activeHalfDay[person.id] as number, v as ShiftType)}
-                      options={[
-                        { value: 'open', label: '오픈' },
-                        { value: 'middle', label: '미들' },
-                        { value: 'close', label: '마감' }
-                      ]}
-                    />
-                  </div>
-                )}
-              </div>
             </div>
           ))}
         </div>
+
+        <div className="actions">
+          <Button onClick={handleConfirmPeople} variant="secondary" disabled={!canConfirm}>
+            확인
+          </Button>
+        </div>
       </Card>
+
+      {confirmed && people.length > 0 && (
+        <Card title="휴무/하프 설정">
+          <div className="request-editor">
+            <div className="person-picker">
+              {people.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`person-chip ${selectedPersonId === p.id ? 'active' : ''}`}
+                  onClick={() => setSelectedPersonId(p.id)}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="request-mode">
+              <button
+                type="button"
+                className={`request-mode-btn ${requestMode === 'off' ? 'active' : ''}`}
+                onClick={() => setRequestMode('off')}
+              >
+                휴무
+              </button>
+              <button
+                type="button"
+                className={`request-mode-btn half ${requestMode === 'half' ? 'active' : ''}`}
+                onClick={() => setRequestMode('half')}
+              >
+                하프
+              </button>
+            </div>
+
+            <div className="calendar-wrapper">
+              {renderRequestCalendar(year, month)}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {errors.length > 0 && (
         <Card title="❌ 스케줄 생성 불가">
