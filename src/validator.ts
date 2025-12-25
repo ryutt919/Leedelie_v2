@@ -35,6 +35,30 @@ export function validateScheduleInputs(
     errors.push({ type: 'rules', message: '최대 근무 인원은 0.5 단위이며 기본 근무 인원 이상이어야 합니다.' });
   }
 
+  // SHIFT_PRIORITY 구조 검사 (옵셔널)
+  if (rules.SHIFT_PRIORITY !== undefined) {
+    if (typeof rules.SHIFT_PRIORITY !== 'object' || Array.isArray(rules.SHIFT_PRIORITY)) {
+      errors.push({ type: 'rules', message: 'SHIFT_PRIORITY는 숫자 키에 시프트 배열 값인 객체여야 합니다.' });
+    } else {
+      Object.entries(rules.SHIFT_PRIORITY).forEach(([k, v]) => {
+        const keyNum = parseInt(k, 10);
+        if (Number.isNaN(keyNum)) {
+          errors.push({ type: 'rules', message: `SHIFT_PRIORITY의 키(${k})는 숫자여야 합니다.` });
+          return;
+        }
+        if (!Array.isArray(v) || v.length === 0) {
+          errors.push({ type: 'rules', message: `SHIFT_PRIORITY[${k}]는 최소 하나 이상의 시프트를 포함한 배열이어야 합니다.` });
+          return;
+        }
+        v.forEach((s: any) => {
+          if (s !== 'open' && s !== 'middle' && s !== 'close') {
+            errors.push({ type: 'rules', message: `SHIFT_PRIORITY[${k}]에 잘못된 시프트 값이 포함되어 있습니다: ${String(s)}` });
+          }
+        });
+      });
+    }
+  }
+
   // 날짜별 필요 인원 오버라이드 검증
   Object.entries(dailyStaffByDate).forEach(([dayStr, value]) => {
     const day = parseInt(dayStr);

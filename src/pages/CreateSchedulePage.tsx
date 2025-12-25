@@ -5,10 +5,10 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { Checkbox } from '../components/Checkbox';
-import { Person, Schedule, ShiftType, ValidationError } from '../types';
+import { Person, Schedule, ShiftType, ValidationError, StaffConfig } from '../types';
 import { validateScheduleInputs, getDaysInMonth } from '../validator';
 import { generateSchedule, validateGeneratedSchedule, ScheduleGenerationError, exportSchedulesToXlsx } from '../generator';
-import { getScheduleById, saveSchedule } from '../storage';
+import { getScheduleById, saveSchedule, saveStaffConfig, loadStaffConfig } from '../storage';
 import { getWorkRules } from '../workRules';
 
 type RequestMode = 'off' | 'half';
@@ -60,6 +60,32 @@ export function CreateSchedulePage() {
     setSchedule(existing);
     setErrors([]);
   }, [location.state]);
+
+  // 마운트 시 편집 모드가 아니면 저장된 직원 구성 자동 로드
+  useEffect(() => {
+    const state = location.state as { editScheduleId?: string } | null;
+    if (state?.editScheduleId) return; // 편집 모드면 자동 로드하지 않음
+
+    const configs = loadStaffConfig();
+    if (configs && configs.length > 0) {
+      const loadedPeople: Person[] = configs.map((c: StaffConfig) => ({
+        id: c.id,
+        name: c.name,
+        canOpen: c.canOpen,
+        canMiddle: c.canMiddle,
+        canClose: c.canClose,
+        mustOpen: c.mustOpen ?? false,
+        mustClose: c.mustClose ?? false,
+        preferredShift: (c.preferredShift as ShiftType) ?? 'middle',
+        requestedDaysOff: [],
+        halfRequests: {}
+      }));
+      setPeople(loadedPeople);
+      setPeopleCount(loadedPeople.length);
+      setSelectedPersonId(loadedPeople[0]?.id ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 인원 수 변경 시 배열 초기화
   const handlePeopleCountChange = (count: string) => {
@@ -158,6 +184,49 @@ export function CreateSchedulePage() {
     const person = people[personIndex];
     if (person.halfRequests[day] === undefined) return;
     updatePerson(personIndex, { halfRequests: { ...person.halfRequests, [day]: shift } }, false);
+  };
+
+  // 직원 구성 저장/불러오기
+  const handleSaveStaffConfig = () => {
+    const configs: StaffConfig[] = people.map(p => ({
+      id: p.id,
+      name: p.name,
+      canOpen: p.canOpen,
+      canMiddle: p.canMiddle,
+      canClose: p.canClose,
+      mustOpen: p.mustOpen || undefined,
+      mustClose: p.mustClose || undefined,
+      preferredShift: p.preferredShift ?? null
+    }));
+    saveStaffConfig(configs);
+    alert('직원 구성이 저장되었습니다.');
+  };
+
+  const handleLoadStaffConfig = () => {
+    const configs = loadStaffConfig();
+    if (!configs || configs.length === 0) {
+      alert('저장된 직원 구성이 없습니다.');
+      return;
+    }
+
+    const loadedPeople: Person[] = configs.map((c: StaffConfig) => ({
+      id: c.id,
+      name: c.name,
+      canOpen: c.canOpen,
+      canMiddle: c.canMiddle,
+      canClose: c.canClose,
+      mustOpen: c.mustOpen ?? false,
+      mustClose: c.mustClose ?? false,
+      preferredShift: (c.preferredShift as ShiftType) ?? 'middle',
+      requestedDaysOff: [],
+      halfRequests: {}
+    }));
+
+    setPeople(loadedPeople);
+    setPeopleCount(loadedPeople.length);
+    setSelectedPersonId(loadedPeople[0]?.id ?? null);
+    setConfirmed(false);
+    setSchedule(null);
   };
 
   const formatStaff = (value: number): string => {
@@ -522,6 +591,12 @@ export function CreateSchedulePage() {
         <div className="actions">
           <Button onClick={handleConfirmPeople} variant="secondary" disabled={!canConfirm}>
             확인
+          </Button>
+          <Button onClick={handleSaveStaffConfig} variant="secondary">
+            직원 구성 저장
+          </Button>
+          <Button onClick={handleLoadStaffConfig} variant="secondary">
+            직원 구성 불러오기
           </Button>
         </div>
       </Card>

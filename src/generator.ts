@@ -3,6 +3,31 @@ import { getDaysInMonth } from './validator';
 import * as XLSX from 'xlsx';
 import { getWorkRules } from './workRules';
 
+// headcount에 따른 우선순위 반환
+export function getShiftPriorityForHeadcount(rules: any, headcount: number): ShiftType[] {
+  const defaultPriority: ShiftType[] = ['open', 'close', 'middle'];
+  const map = rules?.SHIFT_PRIORITY ?? null;
+  if (!map || typeof map !== 'object') return defaultPriority;
+
+  const keys = Object.keys(map)
+    .map(k => parseInt(k, 10))
+    .filter(n => !isNaN(n))
+    .sort((a, b) => a - b);
+
+  if (keys.length === 0) return defaultPriority;
+
+  // 동일 키가 있으면 사용, 없으면 headcount보다 작거나 같은 최대 키 사용, 없으면 가장 작은 키 사용
+  let chosenKey: number | undefined = keys.find(k => k === headcount);
+  if (chosenKey === undefined) {
+    const le = keys.filter(k => k <= headcount);
+    chosenKey = le.length > 0 ? le[le.length - 1] : keys[0];
+  }
+
+  const p = map[chosenKey as any];
+  if (!Array.isArray(p) || p.length === 0) return defaultPriority;
+  return p as ShiftType[];
+}
+
 export class ScheduleGenerationError extends Error {
   public readonly errors: ValidationError[];
 
@@ -211,57 +236,67 @@ export function generateSchedule(
       const openCountAll = dayAssignment.people.filter(p => p.shift === 'open').length;
       const middleCountAll = dayAssignment.people.filter(p => p.shift === 'middle').length;
       const closeCountAll = dayAssignment.people.filter(p => p.shift === 'close').length;
+      // 우선 필수 요구(오픈/마감/미들)가 비어있으면 우선 채움
+      if (openCountAll === 0 || closeCountAll === 0 || (needsThreeShift && middleCountAll === 0)) {
+        let forced: ShiftType | null = null;
+        if (openCountAll === 0) forced = 'open';
+        else if (closeCountAll === 0) forced = 'close';
+        else if (needsThreeShift && middleCountAll === 0) forced = 'middle';
 
-      let neededShift: ShiftType;
-      if (openCountAll === 0) neededShift = 'open';
-      else if (closeCountAll === 0) neededShift = 'close';
-      else if (needsThreeShift && middleCountAll === 0) neededShift = 'middle';
-      else {
-        // 기본은 2교대(오픈/마감), 3교대 조건일 때만 오픈/미들/마감 균형 배치
-        if (!needsThreeShift) {
-          neededShift = openCountAll <= closeCountAll ? 'open' : 'close';
-        } else {
-          const counts: Array<{ shift: ShiftType; count: number }> = [
-            { shift: 'open', count: openCountAll },
-            { shift: 'middle', count: middleCountAll },
-            { shift: 'close', count: closeCountAll }
-          ];
-          counts.sort((a, b) => a.count - b.count);
-          neededShift = counts[0].shift;
+        if (forced) {
+          let eligibleForced = remainingPeople.filter(p => {
+            if (forced === 'open') return p.canOpen;
+            if (forced === 'middle') return p.canMiddle;
+            return p.canClose;
+          });
+          if (eligibleForced.length === 0) {
+            generationErrors.push({ type: 'insufficient-staff', message: `${date}일: ${forced} 배정이 가능한 풀근무 인원이 부족합니다.` });
+            break;
+          }
+          const pick = pickPreferred(eligibleForced, forced);
+          const pickedId = eligibleForced[pick].id;
+          const pickIndexInRemaining = remainingPeople.findIndex(p => p.id === pickedId);
+          const person = remainingPeople.splice(pickIndexInRemaining, 1)[0];
+          dayAssignment.people.push({ personId: person.id, personName: person.name, shift: forced, isHalf: false });
+          continue;
         }
       }
 
-      const eligible = remainingPeople.filter(p => {
-        if (neededShift === 'open') return p.canOpen;
-        if (neededShift === 'middle') return p.canMiddle;
-        return p.canClose;
-      });
+      // 우선순위 기반으로 시프트 선택
+      const priority = getShiftPriorityForHeadcount(rules, plannedHeadcount);
+      let assigned = false;
+      for (const shift of priority) {
+        // 2교대 모드이면 미들은 풀근무 후보에서 제외
+        if (!needsThreeShift && shift === 'middle') continue;
 
-      if (eligible.length === 0) {
-        generationErrors.push({
-          type: 'insufficient-staff',
-          message: `${date}일: ${neededShift} 배정이 가능한 풀근무 인원이 부족합니다.`
+        const eligible = remainingPeople.filter(p => {
+          if (shift === 'open') return p.canOpen;
+          if (shift === 'middle') return p.canMiddle;
+          return p.canClose;
         });
+
+        if (eligible.length === 0) continue;
+
+        const pick = pickPreferred(eligible, shift);
+        const pickedId = eligible[pick].id;
+        const pickIndexInRemaining = remainingPeople.findIndex(p => p.id === pickedId);
+        const person = remainingPeople.splice(pickIndexInRemaining, 1)[0];
+
+        // 2교대 모드에서 middle인 경우는 다른 시프트로 보정
+        let finalShift: ShiftType = shift;
+        if (!needsThreeShift && finalShift === 'middle') {
+          finalShift = person.preferredShift === 'close' && person.canClose ? 'close' : 'open';
+        }
+
+        dayAssignment.people.push({ personId: person.id, personName: person.name, shift: finalShift, isHalf: false });
+        assigned = true;
         break;
       }
 
-      const pick = pickPreferred(eligible, neededShift);
-      const pickedId = eligible[pick].id;
-      const pickIndexInRemaining = remainingPeople.findIndex(p => p.id === pickedId);
-      const person = remainingPeople.splice(pickIndexInRemaining, 1)[0];
-
-      // 2교대 조건일 때는 풀근무 배정은 오픈/마감만(미들은 하프 요청으로만 허용)
-      let finalShift: ShiftType = neededShift;
-      if (!needsThreeShift && finalShift === 'middle') {
-        finalShift = person.preferredShift === 'close' && person.canClose ? 'close' : 'open';
+      if (!assigned) {
+        generationErrors.push({ type: 'insufficient-staff', message: `${date}일: 배정 가능한 풀근무 인원이 부족합니다.` });
+        break;
       }
-
-      dayAssignment.people.push({
-        personId: person.id,
-        personName: person.name,
-        shift: finalShift,
-        isHalf: false
-      });
     }
 
     // 생성 결과(해당 날짜)가 규칙을 만족하는지 즉시 검증

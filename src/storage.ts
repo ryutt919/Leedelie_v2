@@ -1,5 +1,5 @@
-import { Schedule, Person, ShiftType } from './types';
-import { STORAGE_KEY } from './constants';
+import { Schedule, Person, ShiftType, StaffConfig } from './types';
+import { STORAGE_KEY, STAFF_CONFIG_KEY } from './constants';
 
 function normalizePerson(raw: Person): Person {
   const canOpen = typeof raw.canOpen === 'boolean' ? raw.canOpen : true;
@@ -28,6 +28,28 @@ function normalizePerson(raw: Person): Person {
     preferredShift,
     requestedDaysOff,
     halfRequests
+  };
+}
+
+function normalizeStaffConfig(raw: any): StaffConfig {
+  const id = typeof raw?.id === 'string' ? raw.id : String(Math.random()).slice(2);
+  const name = typeof raw?.name === 'string' ? raw.name : 'Unnamed';
+  const canOpen = typeof raw?.canOpen === 'boolean' ? raw.canOpen : true;
+  const canMiddle = typeof raw?.canMiddle === 'boolean' ? raw.canMiddle : true;
+  const canClose = typeof raw?.canClose === 'boolean' ? raw.canClose : true;
+  const mustOpen = typeof raw?.mustOpen === 'boolean' ? raw.mustOpen : undefined;
+  const mustClose = typeof raw?.mustClose === 'boolean' ? raw.mustClose : undefined;
+  const preferredShift = raw?.preferredShift === 'open' || raw?.preferredShift === 'middle' || raw?.preferredShift === 'close' ? raw.preferredShift : null;
+
+  return {
+    id,
+    name,
+    canOpen,
+    canMiddle,
+    canClose,
+    mustOpen,
+    mustClose,
+    preferredShift
   };
 }
 
@@ -76,4 +98,54 @@ export function deleteSchedule(id: string): void {
 export function getScheduleById(id: string): Schedule | undefined {
   const schedules = loadSchedules();
   return schedules.find(s => s.id === id);
+}
+
+// --- StaffConfig storage (global staff composition) ---
+export function saveStaffConfig(config: StaffConfig[]): void {
+  try {
+    const normalized = Array.isArray(config) ? config.map(c => normalizeStaffConfig(c)) : [];
+    localStorage.setItem(STAFF_CONFIG_KEY, JSON.stringify(normalized));
+  } catch (e) {
+    // ignore
+  }
+}
+
+export function loadStaffConfig(): StaffConfig[] {
+  const data = localStorage.getItem(STAFF_CONFIG_KEY);
+  if (!data) return [];
+  try {
+    const parsed = JSON.parse(data) as any[];
+    return Array.isArray(parsed) ? parsed.map(normalizeStaffConfig) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function deleteStaffConfig(): void {
+  localStorage.removeItem(STAFF_CONFIG_KEY);
+}
+
+// Helper for potential migration from existing schedules to staff config.
+// Intentionally left inactive to avoid accidental automatic migration.
+export function migrateStaffFromSchedules(): StaffConfig[] {
+  const schedules = loadSchedules();
+  // Example helper: extract unique people across schedules
+  const map: Record<string, StaffConfig> = {};
+  schedules.forEach(s => {
+    s.people.forEach(p => {
+      if (!map[p.id]) {
+        map[p.id] = {
+          id: p.id,
+          name: p.name,
+          canOpen: p.canOpen,
+          canMiddle: p.canMiddle,
+          canClose: p.canClose,
+          mustOpen: p.mustOpen || undefined,
+          mustClose: p.mustClose || undefined,
+          preferredShift: p.preferredShift || null
+        };
+      }
+    });
+  });
+  return Object.values(map);
 }

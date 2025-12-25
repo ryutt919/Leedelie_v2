@@ -43,3 +43,15 @@ export interface ValidationError {
   type: string;
   message: string;
 }
+
+// 전역 직원 구성(스케줄과 별개)
+export interface StaffConfig {
+  id: string;
+  name: string;
+  canOpen: boolean;
+  canMiddle: boolean;
+  canClose: boolean;
+  mustOpen?: boolean;
+  mustClose?: boolean;
+  preferredShift?: ShiftType | null;
+}
