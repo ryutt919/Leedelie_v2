@@ -1,3 +1,9 @@
+---
+noteId: "2ec60f90e1ce11f0a00f19ec7f01b082"
+tags: []
+
+---
+
 # CSV 파일 형식 가이드
 
 LeeDeli 시스템에서 사용하는 CSV 파일 형식에 대한 설명입니다.

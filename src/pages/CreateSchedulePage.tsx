@@ -535,7 +535,7 @@ export function CreateSchedulePage() {
           type="number"
           label="인원 수"
           value={peopleCount}
-          onChange={handlePeopleCountChange}
+          onChange={(e) => handlePeopleCountChange((e.target as HTMLInputElement).value)}
           min={1}
           max={20}
         />
@@ -548,7 +548,7 @@ export function CreateSchedulePage() {
               <Input
                 label="이름"
                 value={person.name}
-                onChange={(v) => updatePerson(index, { name: v })}
+                onChange={(e) => updatePerson(index, { name: (e.target as HTMLInputElement).value })}
                 placeholder="이름 입력"
               />
 
@@ -603,7 +603,7 @@ export function CreateSchedulePage() {
                     label="오픈 우선순위"
                     type="number"
                     value={person.openPriority?.toString() ?? ''}
-                    onChange={(v) => updatePerson(index, { openPriority: v ? parseInt(v) : undefined })}
+                    onChange={(e) => updatePerson(index, { openPriority: (e.target as HTMLInputElement).value ? parseInt((e.target as HTMLInputElement).value) : undefined })}
                     placeholder="미설정"
                     min={1}
                     max={peopleCount}
@@ -612,7 +612,7 @@ export function CreateSchedulePage() {
                     label="미들 우선순위"
                     type="number"
                     value={person.middlePriority?.toString() ?? ''}
-                    onChange={(v) => updatePerson(index, { middlePriority: v ? parseInt(v) : undefined })}
+                    onChange={(e) => updatePerson(index, { middlePriority: (e.target as HTMLInputElement).value ? parseInt((e.target as HTMLInputElement).value) : undefined })}
                     placeholder="미설정"
                     min={1}
                     max={peopleCount}
@@ -621,7 +621,7 @@ export function CreateSchedulePage() {
                     label="마감 우선순위"
                     type="number"
                     value={person.closePriority?.toString() ?? ''}
-                    onChange={(v) => updatePerson(index, { closePriority: v ? parseInt(v) : undefined })}
+                    onChange={(e) => updatePerson(index, { closePriority: (e.target as HTMLInputElement).value ? parseInt((e.target as HTMLInputElement).value) : undefined })}
                     placeholder="미설정"
                     min={1}
                     max={peopleCount}
