@@ -17,7 +17,7 @@ export function CreateSchedulePage() {
 
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
-  const [peopleCount, setPeopleCount] = useState(3);
+  const [peopleCount, setPeopleCount] = useState(0);
   const [people, setPeople] = useState<Person[]>([]);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [schedule, setSchedule] = useState<Schedule | null>(null);

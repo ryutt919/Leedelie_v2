@@ -28,7 +28,7 @@ function App() {
         </main>
 
         <footer className="footer">
-          <p>&copy; 2025 근무 스케줄 관리 시스템</p>
+          <p>&copy; 2025 leedeli management</p>
         </footer>
       </div>
     </BrowserRouter>
