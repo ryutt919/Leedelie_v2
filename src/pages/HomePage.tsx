@@ -53,17 +53,17 @@ export function HomePage() {
         </Card>
 
         <Card title="프렙 관리">
-          <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
           <Link to="/preps">
             <Button variant="primary">프렙 관리하기</Button>
           </Link>
+          <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
         </Card>
 
         <Card title="재료 관리">
-          <p>csv 구조 : 이름,가격,구매단위</p>
           <Link to="/ingredients">
             <Button variant="secondary">재료 관리하기</Button>
           </Link>
+          <p>csv 구조 : 이름,가격,구매단위</p>
         </Card>
       </div>
 
