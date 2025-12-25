@@ -220,7 +220,7 @@ export function exportSchedulesToExcelCsv(schedules: Schedule[]): void {
 export function exportSchedulesToXlsx(schedules: Schedule[]): void {
   const wb = XLSX.utils.book_new();
 
-  schedules.forEach((schedule, idx) => {
+  schedules.forEach((schedule) => {
     const monthLabel = `${schedule.year}.${String(schedule.month).padStart(2, '0')}`;
     const header = [monthLabel, ...schedule.people.map(p => p.name)];
 
