@@ -616,21 +616,10 @@ export function CreateSchedulePage() {
                       <span>{halfDays.length}일</span>
                     </div>
                     <div className="stat-item">
-                      <strong>휴무(환산):</strong>
+                      <strong>휴무:</strong>
                       <span>{formatStaff(offEquivalent)}일</span>
                     </div>
-                    {offDays.length > 0 && (
-                      <div className="stat-item">
-                        <strong>휴무일:</strong>
-                        <span>{offDays.sort((a, b) => a - b).join(', ')}일</span>
-                      </div>
-                    )}
-                    {halfDays.length > 0 && (
-                      <div className="stat-item">
-                        <strong>하프일:</strong>
-                        <span>{halfDays.sort((a, b) => a - b).join(', ')}일</span>
-                      </div>
-                    )}
+                
                   </div>
                 );
               })}
