@@ -18,21 +18,21 @@ export function generateSchedule(year: number, month: number, people: Person[]):
       !person.requestedDaysOff.includes(date)
     );
 
-    // 필수 오픈 인원 먼저 배치 (휴무가 아닌 경우)
+    // 필수 오픈 인원 중 한 명 배치 (휴무가 아닌 경우)
     const mustOpenPeople = availablePeople.filter(p => p.mustOpen && p.canOpen);
-    mustOpenPeople.forEach(person => {
-      if (!dayAssignment.people.find(p => p.personId === person.id)) {
-        dayAssignment.people.push({
-          personId: person.id,
-          personName: person.name,
-          shift: 'open'
-        });
-      }
-    });
+    if (mustOpenPeople.length > 0) {
+      const person = mustOpenPeople[0];
+      dayAssignment.people.push({
+        personId: person.id,
+        personName: person.name,
+        shift: 'open'
+      });
+    }
 
-    // 필수 마감 인원 배치 (휴무가 아닌 경우)
+    // 필수 마감 인원 중 한 명 배치 (휴무가 아닌 경우)
     const mustClosePeople = availablePeople.filter(p => p.mustClose && p.canClose);
-    mustClosePeople.forEach(person => {
+    if (mustClosePeople.length > 0) {
+      const person = mustClosePeople[0];
       if (!dayAssignment.people.find(p => p.personId === person.id)) {
         dayAssignment.people.push({
           personId: person.id,
@@ -40,7 +40,7 @@ export function generateSchedule(year: number, month: number, people: Person[]):
           shift: 'close'
         });
       }
-    });
+    }
 
     // 나머지 인원 배치 (총 3명까지)
     const alreadyAssigned = dayAssignment.people.map(p => p.personId);
