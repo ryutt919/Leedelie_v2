@@ -10,6 +10,9 @@ export function validateScheduleInputs(
   const errors: ValidationError[] = [];
   const rules = getWorkRules();
 
+  const toHalfUnits = (value: number): number => Math.round(value * 2);
+  const isHalfStep = (value: number): boolean => Number.isFinite(value) && Number.isInteger(value * 2);
+
   // 연도/월 검증
   if (!year || year < 2000 || year > 2100) {
     errors.push({ type: 'year', message: '연도를 올바르게 선택해주세요.' });
@@ -23,6 +26,30 @@ export function validateScheduleInputs(
     errors.push({ type: 'people', message: '최소 1명 이상의 인원을 추가해주세요.' });
     return errors;
   }
+
+  // 규칙 검증
+  if (!isHalfStep(rules.DAILY_STAFF_BASE) || rules.DAILY_STAFF_BASE < 0.5) {
+    errors.push({ type: 'rules', message: '기본 근무 인원은 0.5 단위로 0.5 이상이어야 합니다.' });
+  }
+  if (!isHalfStep(rules.DAILY_STAFF_MAX) || rules.DAILY_STAFF_MAX < rules.DAILY_STAFF_BASE) {
+    errors.push({ type: 'rules', message: '최대 근무 인원은 0.5 단위이며 기본 근무 인원 이상이어야 합니다.' });
+  }
+
+  // 날짜별 필요 인원 오버라이드 검증
+  Object.entries(dailyStaffByDate).forEach(([dayStr, value]) => {
+    const day = parseInt(dayStr);
+    if (!day || day < 1 || day > 31) return;
+    if (!isHalfStep(value)) {
+      errors.push({ type: 'rules', message: `${day}일: 필요 인원은 0.5 단위로만 설정할 수 있습니다.` });
+      return;
+    }
+    if (value < rules.DAILY_STAFF_BASE || value > rules.DAILY_STAFF_MAX) {
+      errors.push({
+        type: 'rules',
+        message: `${day}일: 필요 인원은 기본(${rules.DAILY_STAFF_BASE})~최대(${rules.DAILY_STAFF_MAX}) 사이여야 합니다.`
+      });
+    }
+  });
 
   // 이름 검증
   people.forEach((person, index) => {
@@ -46,10 +73,24 @@ export function validateScheduleInputs(
       if (shift === 'open' && !person.canOpen) {
         errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}의 ${day}일 하프는 오픈으로 선택했지만 오픈 근무가 불가능합니다.` });
       }
+      if (shift === 'middle' && !person.canMiddle) {
+        errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}의 ${day}일 하프는 미들로 선택했지만 미들 근무가 불가능합니다.` });
+      }
       if (shift === 'close' && !person.canClose) {
         errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}의 ${day}일 하프는 마감으로 선택했지만 마감 근무가 불가능합니다.` });
       }
     });
+
+    // 선호 시프트 유효성
+    if (person.preferredShift === 'open' && !person.canOpen) {
+      errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}의 선호 시프트가 오픈이지만 오픈 근무가 불가능합니다.` });
+    }
+    if (person.preferredShift === 'middle' && !person.canMiddle) {
+      errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}의 선호 시프트가 미들이지만 미들 근무가 불가능합니다.` });
+    }
+    if (person.preferredShift === 'close' && !person.canClose) {
+      errors.push({ type: 'conflict', message: `${person.name || `${index + 1}번째 인원`}의 선호 시프트가 마감이지만 마감 근무가 불가능합니다.` });
+    }
 
     // 오픈/마감 필수인 사람은 하프 요청이 해당 시프트와 충돌하면 안 됨
     halfDays.forEach(day => {
@@ -66,6 +107,7 @@ export function validateScheduleInputs(
 
   // 오픈/마감 가능 인원 검증
   const canOpenPeople = people.filter(p => p.canOpen);
+  const canMiddlePeople = people.filter(p => p.canMiddle);
   const canClosePeople = people.filter(p => p.canClose);
 
   if (canOpenPeople.length === 0) {
@@ -73,6 +115,9 @@ export function validateScheduleInputs(
   }
   if (canClosePeople.length === 0) {
     errors.push({ type: 'shift', message: '마감 근무가 가능한 인원이 최소 1명은 필요합니다.' });
+  }
+  if (canMiddlePeople.length === 0) {
+    errors.push({ type: 'shift', message: '미들 근무가 가능한 인원이 최소 1명은 필요합니다.' });
   }
 
   // 필수 인원이 해당 시프트 가능한지 검증
@@ -98,36 +143,60 @@ export function validateScheduleInputs(
   const hasMustClose = mustClosePeople.length > 0;
   
   for (let date = 1; date <= daysInMonth; date++) {
-    const requiredStaff = dailyStaffByDate[date] ?? rules.DAILY_STAFF;
+    const requiredStaff = dailyStaffByDate[date] ?? rules.DAILY_STAFF_BASE;
+    const requiredUnits = toHalfUnits(requiredStaff);
 
-    // 풀근무 인원(=근무 인원으로 인정) 후보: 휴무가 아니고, 하프도 아닌 사람
+    // 고정된 하프(0.5) 인원(휴무는 이미 충돌 금지)
+    const fixedHalfPeople = people.filter(p => !p.requestedDaysOff.includes(date) && p.halfRequests?.[date] !== undefined);
+    const fixedHalfUnits = fixedHalfPeople.length; // 1명 = 0.5 = 1 unit
+
+    // 풀근무 후보: 휴무가 아니고, 하프도 아닌 사람 (1.0 = 2 units)
     const availableFullForDay = people.filter(p => !p.requestedDaysOff.includes(date) && p.halfRequests?.[date] === undefined);
 
-    // 해당 날짜에 고정된 하프 요청 인원 수 체크(하프는 근무 인원으로 미포함)
-    const fixedHalfCount = people.filter(p => p.halfRequests?.[date] !== undefined).length;
-    if (fixedHalfCount > 0 && availableFullForDay.length === 0) {
-      // 풀근무 후보가 없으면 반드시 실패하므로 미리 알려줌
+    const remainingUnits = requiredUnits - fixedHalfUnits;
+    if (remainingUnits < 0) {
       errors.push({
         type: 'insufficient',
-        message: `${date}일: 하프 요청 인원이 ${fixedHalfCount}명이고 풀근무 가능한 인원이 없습니다.`
+        message: `${date}일: 하프 인원(${fixedHalfPeople.length}명 = ${fixedHalfUnits / 2}인)가 필요 인원(${requiredStaff}인)을 초과합니다.`
       });
+      continue;
     }
-    
-    if (availableFullForDay.length < requiredStaff) {
+    if (remainingUnits % 2 !== 0) {
       errors.push({
         type: 'insufficient',
-        message: `${date}일: 풀근무 가능한 인원이 ${availableFullForDay.length}명으로 부족합니다. (필요: ${requiredStaff}명)`
+        message: `${date}일: 필요 인원(${requiredStaff}인)을 맞추려면 하프 요청(0.5 단위)이 추가로 필요합니다.`
+      });
+      continue;
+    }
+
+    const requiredFullCount = remainingUnits / 2;
+    if (availableFullForDay.length < requiredFullCount) {
+      errors.push({
+        type: 'insufficient',
+        message: `${date}일: 풀근무 가능한 인원이 ${availableFullForDay.length}명으로 부족합니다. (필요: ${requiredFullCount}명, 하프: ${fixedHalfPeople.length}명)`
       });
     }
-    
-    const canOpenOnDay = availableFullForDay.filter(p => p.canOpen).length;
-    const canCloseOnDay = availableFullForDay.filter(p => p.canClose).length;
-    
-    if (canOpenOnDay === 0) {
-      errors.push({ type: 'no-opener', message: `${date}일: 오픈 가능한 인원이 없습니다.` });
+
+    // 3교대 조건: 근무 인원(헤드카운트) 3명 이상 또는 하프 2명 이상
+    const plannedHeadcount = fixedHalfPeople.length + requiredFullCount;
+    const needsThreeShift = plannedHeadcount >= 3 || fixedHalfPeople.length >= 2;
+
+    const fixedHasOpen = fixedHalfPeople.some(p => p.halfRequests?.[date] === 'open');
+    const fixedHasMiddle = fixedHalfPeople.some(p => p.halfRequests?.[date] === 'middle');
+    const fixedHasClose = fixedHalfPeople.some(p => p.halfRequests?.[date] === 'close');
+
+    const canCoverOpen = fixedHasOpen || availableFullForDay.some(p => p.canOpen);
+    const canCoverClose = fixedHasClose || availableFullForDay.some(p => p.canClose);
+    const canCoverMiddle = fixedHasMiddle || availableFullForDay.some(p => p.canMiddle);
+
+    if (!canCoverOpen) {
+      errors.push({ type: 'no-opener', message: `${date}일: 오픈을 배정할 수 있는 인원이 없습니다.` });
     }
-    if (canCloseOnDay === 0) {
-      errors.push({ type: 'no-closer', message: `${date}일: 마감 가능한 인원이 없습니다.` });
+    if (!canCoverClose) {
+      errors.push({ type: 'no-closer', message: `${date}일: 마감을 배정할 수 있는 인원이 없습니다.` });
+    }
+    if (needsThreeShift && !canCoverMiddle) {
+      errors.push({ type: 'no-middle', message: `${date}일: 3교대 조건인데 미들을 배정할 수 있는 인원이 없습니다.` });
     }
     
     // 필수 인원이 설정되어 있다면, 해당 날짜에 필수 인원 중 최소 1명이 가능한지 확인

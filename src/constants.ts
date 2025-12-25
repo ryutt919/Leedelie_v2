@@ -1,12 +1,14 @@
 // 근무 규칙
 export type WorkRules = {
-  DAILY_STAFF: number;
+  DAILY_STAFF_BASE: number;
+  DAILY_STAFF_MAX: number;
   WORK_HOURS: number;
   BREAK_HOURS: number;
 };
 
 export const DEFAULT_WORK_RULES: WorkRules = {
-  DAILY_STAFF: 2,
+  DAILY_STAFF_BASE: 2,
+  DAILY_STAFF_MAX: 3,
   WORK_HOURS: 8,
   BREAK_HOURS: 1
 };

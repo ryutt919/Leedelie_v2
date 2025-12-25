@@ -6,9 +6,11 @@ export interface Person {
   id: string;
   name: string;
   canOpen: boolean;
+  canMiddle: boolean;
   canClose: boolean;
   mustOpen: boolean;
   mustClose: boolean;
+  preferredShift: ShiftType;
   requestedDaysOff: number[];
   halfRequests: Record<number, ShiftType>;
 }

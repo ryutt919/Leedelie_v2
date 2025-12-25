@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import type { WorkRules } from '../constants';
@@ -13,8 +13,15 @@ export function HomePage() {
   }, []);
 
   const handleSaveRules = () => {
-    if (!rules.DAILY_STAFF || rules.DAILY_STAFF < 1 || rules.DAILY_STAFF > 20) {
-      alert('1일 근무 인원은 1~20 사이로 입력해주세요.');
+    const baseUnitsRaw = rules.DAILY_STAFF_BASE * 2;
+    const maxUnitsRaw = rules.DAILY_STAFF_MAX * 2;
+
+    if (!rules.DAILY_STAFF_BASE || rules.DAILY_STAFF_BASE < 0.5 || rules.DAILY_STAFF_BASE > 20 || !Number.isInteger(baseUnitsRaw)) {
+      alert('기본 근무 인원은 0.5~20 사이(0.5 단위)로 입력해주세요.');
+      return;
+    }
+    if (!rules.DAILY_STAFF_MAX || rules.DAILY_STAFF_MAX < rules.DAILY_STAFF_BASE || rules.DAILY_STAFF_MAX > 20 || !Number.isInteger(maxUnitsRaw)) {
+      alert('최대 근무 인원은 기본 근무 인원 이상, 20 이하(0.5 단위)로 입력해주세요.');
       return;
     }
     if (rules.WORK_HOURS < 1 || rules.WORK_HOURS > 24) {
@@ -54,14 +61,27 @@ export function HomePage() {
         <h2>근무 규칙</h2>
         <div className="info-grid">
           <div className="info-item">
-            <strong>1일 근무 인원</strong>
+            <strong>기본 근무 인원</strong>
             <input
               className="input"
               type="number"
-              min={1}
+              min={0.5}
               max={20}
-              value={rules.DAILY_STAFF}
-              onChange={(e) => setRules({ ...rules, DAILY_STAFF: parseInt(e.target.value) || 0 })}
+              step={0.5}
+              value={rules.DAILY_STAFF_BASE}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setRules({ ...rules, DAILY_STAFF_BASE: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="info-item">
+            <strong>최대 근무 인원</strong>
+            <input
+              className="input"
+              type="number"
+              min={0.5}
+              max={20}
+              step={0.5}
+              value={rules.DAILY_STAFF_MAX}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setRules({ ...rules, DAILY_STAFF_MAX: parseFloat(e.target.value) || 0 })}
             />
           </div>
           <div className="info-item">
@@ -75,7 +95,7 @@ export function HomePage() {
                   min={1}
                   max={24}
                   value={rules.WORK_HOURS}
-                  onChange={(e) => setRules({ ...rules, WORK_HOURS: parseInt(e.target.value) || 0 })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setRules({ ...rules, WORK_HOURS: parseInt(e.target.value) || 0 })}
                 />
               </div>
               <div className="rule-inline-item">
@@ -86,7 +106,7 @@ export function HomePage() {
                   min={0}
                   max={8}
                   value={rules.BREAK_HOURS}
-                  onChange={(e) => setRules({ ...rules, BREAK_HOURS: parseInt(e.target.value) || 0 })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setRules({ ...rules, BREAK_HOURS: parseInt(e.target.value) || 0 })}
                 />
               </div>
             </div>
