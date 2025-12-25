@@ -40,7 +40,7 @@ export function HomePage() {
   return (
     <div className="container">
       <div className="cards-grid">
-        <Card title="근무 스케줄 생성">
+        <Card title="leedelie">
           <p>새로운 월간 근무 스케줄을 생성합니다.</p>
           <p>인원 배치, 오픈/마감조 관리, 휴무일 설정 등을 자동으로 처리합니다.</p>
           <Link to="/create">
