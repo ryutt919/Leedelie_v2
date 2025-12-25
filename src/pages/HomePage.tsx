@@ -42,7 +42,6 @@ export function HomePage() {
       <div className="cards-grid">
         <Card title="근무 스케줄 생성">
           <p>새로운 월간 근무 스케줄을 생성합니다.</p>
-          <p>인원 배치, 오픈/마감조 관리, 휴무일 설정 등을 자동으로 처리합니다.</p>
           <Link to="/create">
             <Button variant="primary">스케줄 생성하기</Button>
           </Link>
@@ -50,7 +49,6 @@ export function HomePage() {
 
         <Card title="스케줄 관리/조회">
           <p>저장된 스케줄을 조회하고 관리합니다.</p>
-          <p>삭제, 엑셀(XLSX) 내보내기 등의 기능을 제공합니다.</p>
           <Link to="/manage">
             <Button variant="secondary">관리하기</Button>
           </Link>
@@ -58,7 +56,6 @@ export function HomePage() {
 
         <Card title="프렙 관리">
           <p>프렙 재료 목록과 보충 이력을 관리합니다.</p>
-          <p>보충 날짜 추가, 예상 보충 날짜 확인, 재료비 계산 등을 제공합니다.</p>
           <Link to="/preps">
             <Button variant="primary">프렙 관리하기</Button>
           </Link>
@@ -66,7 +63,6 @@ export function HomePage() {
 
         <Card title="재료 관리">
           <p>재료 정보를 등록하고 관리합니다.</p>
-          <p>가격, 구매 단위, 단위 가격 등을 관리하며 CSV 업로드를 지원합니다.</p>
           <Link to="/ingredients">
             <Button variant="secondary">재료 관리하기</Button>
           </Link>
