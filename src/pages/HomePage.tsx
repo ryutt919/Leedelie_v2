@@ -41,28 +41,26 @@ export function HomePage() {
     <div className="container">
       <div className="cards-grid">
         <Card title="근무 스케줄 생성">
-          <p>새로운 월간 근무 스케줄을 생성합니다.</p>
           <Link to="/create">
             <Button variant="primary">스케줄 생성하기</Button>
           </Link>
         </Card>
 
         <Card title="스케줄 관리/조회">
-          <p>저장된 스케줄을 조회하고 관리합니다.</p>
           <Link to="/manage">
             <Button variant="secondary">관리하기</Button>
           </Link>
         </Card>
 
         <Card title="프렙 관리">
-          <p>프렙 재료 목록과 보충 이력을 관리합니다.</p>
+          <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
           <Link to="/preps">
             <Button variant="primary">프렙 관리하기</Button>
           </Link>
         </Card>
 
         <Card title="재료 관리">
-          <p>재료 정보를 등록하고 관리합니다.</p>
+          <p>csv 구조 : 이름,가격,구매단위</p>
           <Link to="/ingredients">
             <Button variant="secondary">재료 관리하기</Button>
           </Link>
