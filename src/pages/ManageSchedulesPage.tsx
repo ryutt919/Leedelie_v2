@@ -123,14 +123,14 @@ export function ManageSchedulesPage() {
             type="number"
             label="연도"
             value={filterYear}
-            onChange={setFilterYear}
+            onChange={(e) => setFilterYear(e.target.value)}
             placeholder="전체"
           />
           <Input
             type="number"
             label="월"
             value={filterMonth}
-            onChange={setFilterMonth}
+            onChange={(e) => setFilterMonth(e.target.value)}
             placeholder="전체"
             min={1}
             max={12}
@@ -138,7 +138,7 @@ export function ManageSchedulesPage() {
           <Input
             label="인원 이름"
             value={filterName}
-            onChange={setFilterName}
+            onChange={(e) => setFilterName(e.target.value)}
             placeholder="검색"
           />
         </div>

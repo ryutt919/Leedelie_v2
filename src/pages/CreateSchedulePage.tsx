@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent, type MouseEvent, type ChangeEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -91,8 +91,8 @@ export function CreateSchedulePage() {
   }, []);
 
   // 인원 수 변경 시 배열 초기화
-  const handlePeopleCountChange = (count: string) => {
-    const num = parseInt(count) || 0;
+  const handlePeopleCountChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const num = parseInt(e.target.value) || 0;
     setPeopleCount(num);
     setConfirmed(false);
     setSchedule(null);
@@ -548,7 +548,7 @@ export function CreateSchedulePage() {
               <Input
                 label="이름"
                 value={person.name}
-                onChange={(v) => updatePerson(index, { name: v })}
+                onChange={(e) => updatePerson(index, { name: e.target.value })}
                 placeholder="이름 입력"
               />
 
@@ -603,7 +603,7 @@ export function CreateSchedulePage() {
                     label="오픈 우선순위"
                     type="number"
                     value={person.openPriority?.toString() ?? ''}
-                    onChange={(v) => updatePerson(index, { openPriority: v ? parseInt(v) : undefined })}
+                    onChange={(e) => updatePerson(index, { openPriority: e.target.value ? parseInt(e.target.value) : undefined })}
                     placeholder="미설정"
                     min={1}
                     max={peopleCount}
@@ -612,7 +612,7 @@ export function CreateSchedulePage() {
                     label="미들 우선순위"
                     type="number"
                     value={person.middlePriority?.toString() ?? ''}
-                    onChange={(v) => updatePerson(index, { middlePriority: v ? parseInt(v) : undefined })}
+                    onChange={(e) => updatePerson(index, { middlePriority: e.target.value ? parseInt(e.target.value) : undefined })}
                     placeholder="미설정"
                     min={1}
                     max={peopleCount}
@@ -621,7 +621,7 @@ export function CreateSchedulePage() {
                     label="마감 우선순위"
                     type="number"
                     value={person.closePriority?.toString() ?? ''}
-                    onChange={(v) => updatePerson(index, { closePriority: v ? parseInt(v) : undefined })}
+                    onChange={(e) => updatePerson(index, { closePriority: e.target.value ? parseInt(e.target.value) : undefined })}
                     placeholder="미설정"
                     min={1}
                     max={peopleCount}
