@@ -199,7 +199,6 @@ export function HomePage() {
                     <Button 
                       variant="danger" 
                       onClick={() => handleDeleteShiftPriority(parseInt(headcount))}
-                      style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
                     >
                       삭제
                     </Button>
