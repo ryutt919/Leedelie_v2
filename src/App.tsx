@@ -18,8 +18,8 @@ function App() {
             <Link to="/">홈</Link>
             <Link to="/create">스케줄 생성</Link>
             <Link to="/manage">스케줄 관리/조회</Link>
-            <Link to="/preps">프렙관리</Link>
-            <Link to="/ingredients">재료관리</Link>
+            <Link to="/preps">프렙/소스 관리</Link>
+            <Link to="/ingredients">재료 관리</Link>
           </div>
         </nav>
 

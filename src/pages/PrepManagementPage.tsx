@@ -144,7 +144,7 @@ export function PrepManagementPage() {
         const validationErrors: string[] = [];
         if (!nameRaw) validationErrors.push('프렙/소스명 누락');
         if (!ingredientNameRaw) validationErrors.push('재료명 누락');
-        if (quantityStr && isNaN(parseFloat(quantityStr))) validationErrors.push('수량 숫자 형식 오류');
+        if (quantityStr && isNaN(parseFloat(quantityStr))) validationErrors.push('투입량 숫자 형식 오류');
 
         const key = (nameRaw || '').toLowerCase();
         const matchedIndex = existingPrepNameMap.hasOwnProperty(key) ? existingPrepNameMap[key] : -1;
@@ -153,7 +153,7 @@ export function PrepManagementPage() {
           : undefined;
         const recommendedAction: CsvAction = detectedMatch ? 'merge' : 'create';
 
-        // 자동 무시: 동일한 프렙/소스이 존재하고, 해당 프렙/소스이 이미 같은 재료/수량을 포함하며 보충 날짜도 동일하면 미리보기에 추가하지 않음
+        // 자동 무시: 동일한 프렙/소스이 존재하고, 해당 프렙/소스이 이미 같은 재료/투입량을 포함하며 보충 날짜도 동일하면 미리보기에 추가하지 않음
         if (detectedMatch && detectedMatch.existing) {
           const exPrep = detectedMatch.existing as Prep;
           const qtyNum = parseFloat(String(parsed.quantity || '0') || '0');
@@ -191,7 +191,7 @@ export function PrepManagementPage() {
   return (
     <div className="container">
       <h1>프렙/소스 관리</h1>
-      <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
+      <p>csv 구조 : 이름,재료명,투입량,보충날짜1(2025-12-20)..</p>
       <div className="actions" style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
         <Button variant="primary" onClick={handleAddPrep}>프렙/소스 추가</Button>
         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
@@ -287,7 +287,7 @@ export function PrepManagementPage() {
                 </select>
               </div>
               <div className="input-group">
-                <label>수량</label>
+                <label>투입량</label>
                 <Input
                   type="number"
                   min={0}
@@ -416,7 +416,7 @@ export function PrepManagementPage() {
                           <thead>
                             <tr>
                               <th>재료명</th>
-                              <th>수량</th>
+                              <th>투입량</th>
                               <th>단위 가격</th>
                               <th>총 가격</th>
                             </tr>

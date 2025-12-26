@@ -52,9 +52,9 @@ export function HomePage() {
           </Link>
         </Card>
 
-        <Card title="프렙 관리">
+        <Card title="프렙/소스 관리">
           <Link to="/preps">
-            <Button variant="primary">프렙 관리하기</Button>
+            <Button variant="primary">프렙/소스 관리하기</Button>
           </Link>
         </Card>
 
