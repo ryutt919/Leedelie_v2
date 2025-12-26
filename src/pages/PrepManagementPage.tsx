@@ -1,7 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from 'react';
 import Papa from 'papaparse';
-<<<<<<< HEAD
-=======
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -404,7 +402,6 @@ export function PrepManagementPage() {
   );
 }
 import { useState, useEffect, type ChangeEvent } from 'react';
->>>>>>> 605c1cc (feat: CSV 파싱을 papaparse로 변경, 재료 중복/프렙 충돌 모달 추가, 병합/덮어쓰기 옵션 구현)
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
