@@ -172,7 +172,9 @@ export function IngredientManagementPage() {
         if (isNaN(price) || isNaN(purchaseUnit)) validationErrors.push('숫자 형식 오류');
 
         const key = (name || '').toLowerCase();
-        const detectedMatch = existingNameMap.hasOwnProperty(key) ? { type: 'name_exact' as const, id: existingIngredients[existingNameMap[key]].id } : undefined;
+        const detectedMatch = existingNameMap.hasOwnProperty(key)
+          ? { type: 'name_exact' as const, id: existingIngredients[existingNameMap[key]].id, existing: existingIngredients[existingNameMap[key]] }
+          : undefined;
         const recommendedAction: CsvAction = detectedMatch ? 'update' : 'create';
 
         items.push({ rowNumber, raw: line, parsed, detectedMatch, recommendedAction, validationErrors });

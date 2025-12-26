@@ -127,6 +127,10 @@ export function PrepManagementPage() {
       const existingNameMap: Record<string, number> = {};
       existingIngredients.forEach((ing, i) => { existingNameMap[(ing.name || '').toLowerCase()] = i; });
 
+      const existingPreps = loadPreps();
+      const existingPrepNameMap: Record<string, number> = {};
+      existingPreps.forEach((p, i) => { existingPrepNameMap[(p.name || '').toLowerCase()] = i; });
+
       const items: CsvPreviewItem[] = [];
 
       dataLines.forEach((line, idx) => {
@@ -142,8 +146,11 @@ export function PrepManagementPage() {
         if (!ingredientNameRaw) validationErrors.push('재료명 누락');
         if (quantityStr && isNaN(parseFloat(quantityStr))) validationErrors.push('수량 숫자 형식 오류');
 
-        const detectedMatch = undefined;
-        const recommendedAction: CsvAction = 'create';
+        const key = (nameRaw || '').toLowerCase();
+        const detectedMatch = existingPrepNameMap.hasOwnProperty(key)
+          ? { type: 'name_exact' as const, id: existingPreps[existingPrepNameMap[key]].id, existing: existingPreps[existingPrepNameMap[key]] }
+          : undefined;
+        const recommendedAction: CsvAction = detectedMatch ? 'merge' : 'create';
 
         items.push({ rowNumber, raw: line, parsed, detectedMatch, recommendedAction, validationErrors });
       });
@@ -171,7 +178,7 @@ export function PrepManagementPage() {
     <div className="container">
       <h1>프렙 관리</h1>
       <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
-      <div className="actions" style={{ marginBottom: '1.5rem' }}>
+      <div className="actions" style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
         <Button variant="primary" onClick={handleAddPrep}>프렙 추가</Button>
         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
           CSV 업로드
@@ -179,7 +186,7 @@ export function PrepManagementPage() {
         </label>
         <Button variant="secondary" onClick={() => exportPrepsToXlsx(preps)}>엑셀 내보내기</Button>
         <Button variant="secondary" onClick={() => exportPrepsToCsv(preps)}>CSV 내보내기</Button>
-        <Button variant="danger" onClick={handleResetPreps} style={{ marginLeft: 8 }}>프렙 초기화</Button>
+        <Button variant="danger" onClick={handleResetPreps} >프렙 초기화</Button>
       </div>
       <CsvPreviewModal items={previewItems} open={showPreview} onClose={() => setShowPreview(false)} onApply={handleApplyPreview} />
 

@@ -47,8 +47,24 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     onApply(items, actions);
   };
 
-  function displaySummary(parsed?: Record<string, any>) {
+  function renderParsedSummary(parsed?: Record<string, any>) {
     if (!parsed) return null;
+    // detect ingredient-style parsed (name, price, purchaseUnit)
+    const ingName = parsed.name || parsed.ingredientName || parsed['ingredientName'];
+    const price = parsed.price || parsed.unitPrice || parsed['price'];
+    const purchaseUnit = parsed.purchaseUnit || parsed['purchaseUnit'];
+
+    if (ingName && (price !== undefined || purchaseUnit !== undefined)) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div><strong>재료 :</strong> {ingName}</div>
+          {price !== undefined ? <div><strong>구매 가격 :</strong> {price}</div> : null}
+          {purchaseUnit !== undefined ? <div><strong>구매 단위 :</strong> {purchaseUnit}</div> : null}
+        </div>
+      );
+    }
+
+    // otherwise treat as prep-style parsed
     const pName = parsed.prepName || parsed.name || parsed['prepName'];
     const iName = parsed.ingredientName || parsed['ingredientName'] || parsed['ingredient'];
     const qty = parsed.quantity || parsed.qty || parsed['수량'];
@@ -56,29 +72,60 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {pName ? (
-          <div><strong>프렙명 :</strong> {pName}</div>
-        ) : null}
-        {iName ? (
-          <div><strong>재료 :</strong> {iName}</div>
-        ) : null}
-        {qty !== undefined && qty !== '' ? (
-          <div><strong>투입량 :</strong> {qty}</div>
-        ) : null}
-        {dates && Array.isArray(dates) && dates.length ? (
-          <div style={{ color: '#666', fontSize: 12 }}>보충: {dates.join(', ')}</div>
-        ) : null}
+        {pName ? <div><strong>프렙명 :</strong> {pName}</div> : null}
+        {iName ? <div><strong>재료 :</strong> {iName}</div> : null}
+        {qty !== undefined && qty !== '' ? <div><strong>투입량 :</strong> {qty}</div> : null}
+        {dates && Array.isArray(dates) && dates.length ? <div style={{ color: '#666', fontSize: 12 }}>보충: {dates.join(', ')}</div> : null}
       </div>
     );
+  }
+
+  function renderExistingSummary(existing: any) {
+    if (!existing) return null;
+    // Ingredient existing
+    if (existing.hasOwnProperty('purchaseUnit') || existing.hasOwnProperty('unitPrice')) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div><strong>재료 :</strong> {existing.name}</div>
+          <div><strong>구매 가격 :</strong> {existing.price}</div>
+          <div><strong>구매 단위 :</strong> {existing.purchaseUnit}</div>
+        </div>
+      );
+    }
+
+    // Prep existing
+    if (existing.hasOwnProperty('ingredients')) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div><strong>프렙명 :</strong> {existing.name}</div>
+          {Array.isArray(existing.ingredients) && existing.ingredients.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {existing.ingredients.map((ing: any, idx: number) => (
+                <div key={idx} style={{ display: 'flex', gap: 8 }}>
+                  <div><strong>재료 :</strong> {ing.ingredientName || ing.name || ing.ingredient}</div>
+                  <div><strong>투입량 :</strong> {ing.quantity}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: '#666' }}>현재 없음</div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
       <div style={{ width: '90%', maxWidth: 1000, maxHeight: '80vh', overflow: 'auto', background: 'white', borderRadius: 8, padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <h3 style={{ margin: 0 }}>CSV 업로드 미리보기</h3>
-          <Button variant="secondary" onClick={onClose}>취소</Button>
-           <Button variant="primary" onClick={handleApply}>선택 적용</Button>
+            <h3 style={{ margin: 0 }}>CSV 업로드 미리보기</h3>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <Button variant="secondary" onClick={onClose}>취소</Button>
+            <Button variant="primary" onClick={handleApply}>선택 적용</Button>
+            </div>
         </div>
         <div style={{ marginBottom: 8, color: '#555' }}>총 항목: {items.length}</div>
         <div style={{ overflowX: 'auto' }}>
@@ -109,8 +156,10 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
                     <input type="checkbox" checked={!!selected[it.rowNumber]} onChange={() => toggleSelect(it.rowNumber)} />
                     <div style={{ marginTop: 6 }}>{it.rowNumber}</div>
                   </td>
-                  <td style={{ padding: '8px 4px', verticalAlign: 'top', maxWidth: 320, wordBreak: 'break-word' }}>{displaySummary(it.parsed)}</td>
-                  <td style={{ padding: '8px 4px', verticalAlign: 'top', wordBreak: 'break-word' }}>{displaySummary(it.parsed)}</td>
+                  <td style={{ padding: '8px 4px', verticalAlign: 'top', maxWidth: 320, wordBreak: 'break-word' }}>
+                    {it.detectedMatch && it.detectedMatch.existing ? renderExistingSummary(it.detectedMatch.existing) : <div style={{ color: '#666' }}>현재 없음</div>}
+                  </td>
+                  <td style={{ padding: '8px 4px', verticalAlign: 'top', wordBreak: 'break-word' }}>{renderParsedSummary(it.parsed)}</td>
                   <td style={{ padding: '8px 4px', verticalAlign: 'top' }}>
                     <select value={actions[it.rowNumber]} onChange={(e) => handleChange(it.rowNumber, e.target.value as CsvAction)}>
                       <option value="create">추가</option>

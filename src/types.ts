@@ -97,7 +97,8 @@ export interface CsvPreviewItem {
   rowNumber: number; // 원본 CSV 상의 행 번호(1-based)
   raw: string; // 원본 행 텍스트
   parsed: Record<string, string | number | string[]>; // 파싱된 필드들 (키는 페이지별 규약)
-  detectedMatch?: { type: 'id' | 'name_exact' | 'name_ci'; id?: string };
+  // detectedMatch may include a reference to an existing item under `existing` for preview display
+  detectedMatch?: { type: 'id' | 'name_exact' | 'name_ci'; id?: string; existing?: any };
   recommendedAction: CsvAction;
   validationErrors: string[];
 }
