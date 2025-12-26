@@ -47,6 +47,42 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     onApply(items, actions);
   };
 
+  // compute max left label width (in characters) across all items' ingredient lines
+  const computeLeftStringsFromItem = (it: CsvPreviewItem): string[] => {
+    const lefts: string[] = [];
+    // existing
+    if (it.detectedMatch && it.detectedMatch.existing) {
+      const ex = it.detectedMatch.existing as any;
+      if (ex.ingredients && Array.isArray(ex.ingredients) && ex.ingredients.length > 0) {
+        ex.ingredients.forEach((ing: any) => lefts.push(`재료 : ${String(ing.ingredientName || ing.name || ing.ingredient || '')}`));
+      } else if (ex.name) {
+        lefts.push(`프렙명 : ${String(ex.name)}`);
+      }
+      if (ex.name && ex.purchaseUnit !== undefined) {
+        // ingredient object
+        lefts.push(`재료 : ${String(ex.name)}`);
+      }
+    }
+
+    // parsed
+    const parsed = it.parsed || {};
+    const ingName = parsed.ingredientName || parsed.name || parsed['ingredientName'] || parsed['ingredient'];
+    const qty = parsed.quantity || parsed.qty || parsed['수량'];
+    if (ingName) {
+      lefts.push(`재료 : ${String(ingName)}`);
+    } else if (parsed.prepName || parsed.name) {
+      lefts.push(`프렙명 : ${String(parsed.prepName || parsed.name)}`);
+    }
+
+    return lefts;
+  };
+
+  const maxLeftChars = items.reduce((max, it) => {
+    const arr = computeLeftStringsFromItem(it);
+    arr.forEach(s => { if (s.length > max) max = s.length; });
+    return max;
+  }, 0);
+
   function renderParsedSummary(parsed?: Record<string, any>) {
     if (!parsed) return null;
     // detect ingredient-style parsed (name, price, purchaseUnit)
@@ -57,8 +93,10 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     if (ingName && (price !== undefined || purchaseUnit !== undefined)) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div><strong>재료 :</strong> {ingName}</div>
-          {price !== undefined ? <div><strong>구매 가격 :</strong> {price}</div> : null}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'inline-block', minWidth: `${maxLeftChars}ch` }}><strong>재료 :</strong> {ingName}</div>
+            {price !== undefined ? <div><strong>구매 가격 :</strong> {price}</div> : null}
+          </div>
           {purchaseUnit !== undefined ? <div><strong>구매 단위 :</strong> {purchaseUnit}</div> : null}
         </div>
       );
@@ -73,8 +111,14 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {pName ? <div><strong>프렙명 :</strong> {pName}</div> : null}
-        {iName ? <div><strong>재료 :</strong> {iName}</div> : null}
-        {qty !== undefined && qty !== '' ? <div><strong>투입량 :</strong> {qty}</div> : null}
+        {iName || qty ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'inline-block', minWidth: `${maxLeftChars}ch` }}><strong>재료 :</strong> {iName}</div>
+              {qty !== undefined && qty !== '' ? <div><strong>투입량 :</strong> {qty}</div> : null}
+            </div>
+          </div>
+        ) : null}
         {dates && Array.isArray(dates) && dates.length ? <div style={{ color: '#666', fontSize: 12 }}>보충: {dates.join(', ')}</div> : null}
       </div>
     );
@@ -102,7 +146,7 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {existing.ingredients.map((ing: any, idx: number) => (
                 <div key={idx} style={{ display: 'flex', gap: 8 }}>
-                  <div><strong>재료 :</strong> {ing.ingredientName || ing.name || ing.ingredient}</div>
+                  <div style={{ display: 'inline-block', minWidth: `${maxLeftChars}ch` }}><strong>재료 :</strong> {ing.ingredientName || ing.name || ing.ingredient}</div>
                   <div><strong>투입량 :</strong> {ing.quantity}</div>
                 </div>
               ))}
