@@ -172,10 +172,22 @@ export function IngredientManagementPage() {
         if (isNaN(price) || isNaN(purchaseUnit)) validationErrors.push('숫자 형식 오류');
 
         const key = (name || '').toLowerCase();
-        const detectedMatch = existingNameMap.hasOwnProperty(key)
-          ? { type: 'name_exact' as const, id: existingIngredients[existingNameMap[key]].id, existing: existingIngredients[existingNameMap[key]] }
+        const matchedIndex = existingNameMap.hasOwnProperty(key) ? existingNameMap[key] : -1;
+        const detectedMatch = matchedIndex >= 0
+          ? { type: 'name_exact' as const, id: existingIngredients[matchedIndex].id, existing: existingIngredients[matchedIndex] }
           : undefined;
         const recommendedAction: CsvAction = detectedMatch ? 'update' : 'create';
+
+        // 자동 무시: 이름과 모든 특성(가격, 구매단위)이 기존 항목과 동일하면 미리보기에 추가하지 않음
+        if (detectedMatch && detectedMatch.existing) {
+          const ex = detectedMatch.existing as Ingredient;
+          const priceNum = parseFloat(String(parsed.price || '0') || '0');
+          const puNum = parseFloat(String(parsed.purchaseUnit || '0') || '0');
+          if (!isNaN(priceNum) && !isNaN(puNum) && ex.price === priceNum && ex.purchaseUnit === puNum) {
+            // 완전 일치 → 자동 무시 (미리보기에 추가하지 않음)
+            return; // skip this line
+          }
+        }
 
         items.push({ rowNumber, raw: line, parsed, detectedMatch, recommendedAction, validationErrors });
       });

@@ -147,10 +147,24 @@ export function PrepManagementPage() {
         if (quantityStr && isNaN(parseFloat(quantityStr))) validationErrors.push('수량 숫자 형식 오류');
 
         const key = (nameRaw || '').toLowerCase();
-        const detectedMatch = existingPrepNameMap.hasOwnProperty(key)
-          ? { type: 'name_exact' as const, id: existingPreps[existingPrepNameMap[key]].id, existing: existingPreps[existingPrepNameMap[key]] }
+        const matchedIndex = existingPrepNameMap.hasOwnProperty(key) ? existingPrepNameMap[key] : -1;
+        const detectedMatch = matchedIndex >= 0
+          ? { type: 'name_exact' as const, id: existingPreps[matchedIndex].id, existing: existingPreps[matchedIndex] }
           : undefined;
         const recommendedAction: CsvAction = detectedMatch ? 'merge' : 'create';
+
+        // 자동 무시: 동일한 프렙이 존재하고, 해당 프렙이 이미 같은 재료/수량을 포함하며 보충 날짜도 동일하면 미리보기에 추가하지 않음
+        if (detectedMatch && detectedMatch.existing) {
+          const exPrep = detectedMatch.existing as Prep;
+          const qtyNum = parseFloat(String(parsed.quantity || '0') || '0');
+          const ingredientMatch = exPrep.ingredients && exPrep.ingredients.some(ing => ((ing.ingredientName || '').toLowerCase() === (parsed.ingredientName || '').toString().toLowerCase()) && ing.quantity === qtyNum);
+          const parsedDates = Array.isArray(parsed.replenishDates) ? parsed.replenishDates : (parsed.replenishDates ? [parsed.replenishDates] : []);
+          const datesEqual = JSON.stringify((exPrep.replenishHistory || []).slice().sort()) === JSON.stringify((parsedDates || []).slice().sort());
+          if (ingredientMatch && datesEqual) {
+            // 완전 일치 → 자동 무시
+            return;
+          }
+        }
 
         items.push({ rowNumber, raw: line, parsed, detectedMatch, recommendedAction, validationErrors });
       });
