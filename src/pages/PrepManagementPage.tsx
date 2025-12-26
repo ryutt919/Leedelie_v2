@@ -1,23 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from 'react';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Input } from '../components/Input';
-import { loadPreps, savePreps, deletePrep } from '../storage';
-import { loadIngredients, saveIngredients } from '../storage';
-import { exportPrepsToXlsx, exportPrepsToCsv } from '../generator';
-import type { Prep, PrepIngredient, Ingredient } from '../types';
-
-export function PrepManagementPage() {
-  const [preps, setPreps] = useState<Prep[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [expandedPreps, setExpandedPreps] = useState<Set<string>>(new Set());
-  const [editingPrep, setEditingPrep] = useState<Prep | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-
-  useEffect(() => {
-    loadData();
-  }, []);
-import { useState, useEffect, type ChangeEvent } from 'react';
+import Papa from 'papaparse';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
@@ -194,20 +176,6 @@ export function PrepManagementPage() {
         <Button variant="secondary" onClick={() => exportPrepsToCsv(preps)}>CSV 내보내기</Button>
         <Button variant="danger" onClick={handleResetPreps} style={{ marginLeft: 8 }}>프렙 초기화</Button>
         <Button variant="danger" onClick={handleResetIngredients} style={{ marginLeft: 8 }}>재료 초기화</Button>
-      </div>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCSVUpload}
-            style={{ display: 'none' }}
-          />
-        </label>
-        <Button variant="secondary" onClick={() => exportPrepsToXlsx(preps)}>
-          엑셀 내보내기
-        </Button>
-        <Button variant="secondary" onClick={() => exportPrepsToCsv(preps)}>
-          CSV 내보내기
-        </Button>
       </div>
 
       {showAddForm && editingPrep && (
