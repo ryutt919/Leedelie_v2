@@ -353,9 +353,9 @@ export function PrepManagementPage() {
                     fontSize: '0.875rem',
                     color: 'var(--text-secondary)'
                   }}>
-                    <span>다음 보충 예상 날짜: {formatDate(prep.nextReplenishDate)}</span>
+                    <span>다음 보충 예상: {formatDate(prep.nextReplenishDate)}</span>
                     <span style={{ fontWeight: 'bold' }}>
-                      프렙/소스 총 재료 비용: {prep.totalCost.toLocaleString('ko-KR')}원
+                      총 재료 비용: {prep.totalCost.toLocaleString('ko-KR')}원
                     </span>
                   </div>
                 </div>
