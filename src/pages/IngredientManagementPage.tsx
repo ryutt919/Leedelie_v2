@@ -100,33 +100,51 @@ export function IngredientManagementPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const parseCsvLine = (line: string): string[] => {
+      const res: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQuotes = !inQuotes; continue; }
+        if (ch === ',' && !inQuotes) { res.push(cur); cur = ''; continue; }
+        cur += ch;
+      }
+      res.push(cur);
+      return res.map(s => s.replace(/\uFEFF/g, '').trim());
+    };
+
+    const normalizeField = (s?: string) => (s || '').replace(/\uFEFF/g, '').replace(/^"|"$/g, '').trim();
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      const lines = text.split('\n').filter(line => line.trim());
-      
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
       if (lines.length < 2) {
         alert('CSV 파일 형식이 올바르지 않습니다.');
         return;
       }
 
-      // 헤더 제거
       const dataLines = lines.slice(1);
       const newIngredients: Ingredient[] = [];
       const existingIngredients = loadIngredients();
+      const failures: string[] = [];
 
-      dataLines.forEach((line, index) => {
-        // CSV 형식: 이름,가격,구매단위
-        const [name, priceStr, purchaseUnitStr] = line.split(',').map(s => s.trim());
-        
-        if (!name) return;
-        
+      dataLines.forEach((line, idx) => {
+        const parts = parseCsvLine(line);
+        const name = normalizeField(parts[0]);
+        const priceStr = normalizeField(parts[1]);
+        const purchaseUnitStr = normalizeField(parts[2]);
+
+        if (!name) { failures.push(`행 ${idx + 2}: 이름 누락`); return; }
+
         const price = parseFloat(priceStr || '0');
         const purchaseUnit = parseFloat(purchaseUnitStr || '1');
+        if (isNaN(price) || isNaN(purchaseUnit)) { failures.push(`행 ${idx + 2}: 숫자 형식 오류`); return; }
         const unitPrice = purchaseUnit > 0 ? price / purchaseUnit : 0;
-        
+
         newIngredients.push({
-          id: String(Date.now() + index),
+          id: String(Date.now() + idx),
           name,
           price,
           purchaseUnit,
@@ -136,7 +154,12 @@ export function IngredientManagementPage() {
 
       saveIngredients([...existingIngredients, ...newIngredients]);
       loadData();
-      alert(`${newIngredients.length}개의 재료가 추가되었습니다.`);
+      const successCount = newIngredients.length;
+      if (failures.length === 0) {
+        alert(`${successCount}개의 재료가 추가되었습니다.`);
+      } else {
+        alert(`${successCount}개 추가, ${failures.length}개 실패:\n${failures.slice(0,5).join('\n')}`);
+      }
     };
 
     reader.readAsText(file, 'UTF-8');

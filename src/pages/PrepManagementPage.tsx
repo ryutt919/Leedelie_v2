@@ -227,6 +227,30 @@ export function PrepManagementPage() {
     setEditingPrep({ ...editingPrep, ingredients: updated });
   };
 
+  // 간단한 CSV 한 줄 파서: 큰따옴표로 감싼 필드와 내부 쉼표 처리
+  const parseCsvLine = (line: string): string[] => {
+    const res: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (ch === ',' && !inQuotes) {
+        res.push(cur);
+        cur = '';
+        continue;
+      }
+      cur += ch;
+    }
+    res.push(cur);
+    return res.map(s => s.replace(/\uFEFF/g, '').trim());
+  };
+
+  const normalizeField = (s?: string) => (s || '').replace(/\uFEFF/g, '').replace(/^"|"$/g, '').trim();
+
   const handleCSVUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -234,33 +258,40 @@ export function PrepManagementPage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      const lines = text.split('\n').filter(line => line.trim());
-      
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
       if (lines.length < 2) {
         alert('CSV 파일 형식이 올바르지 않습니다.');
         return;
       }
 
-      // 헤더 제거
       const dataLines = lines.slice(1);
       const newPreps: Prep[] = [];
       const existingPreps = loadPreps();
+      const currentIngredients = loadIngredients();
 
-      dataLines.forEach((line, index) => {
-        // CSV 형식: 이름,재료명,수량,보충날짜1,보충날짜2,...
-        const parts = line.split(',').map(s => s.trim());
-        
-        if (parts.length < 3) return; // 최소 이름, 재료명, 수량 필요
-        
-        const [name, ingredientName, quantityStr, ...replenishDates] = parts;
-        
-        if (!name || !ingredientName) return;
+      const failures: string[] = [];
+
+      dataLines.forEach((line, idx) => {
+        const parts = parseCsvLine(line);
+        if (parts.length < 3) {
+          failures.push(`행 ${idx + 2}: 필드 수 부족`);
+          return;
+        }
+
+        const nameRaw = normalizeField(parts[0]);
+        const ingredientNameRaw = normalizeField(parts[1]);
+        const quantityStr = normalizeField(parts[2]);
+        const replenishDatesRaw = parts.slice(3).map(normalizeField).filter(Boolean);
+
+        if (!nameRaw || !ingredientNameRaw) {
+          failures.push(`행 ${idx + 2}: 이름 또는 재료명 누락`);
+          return;
+        }
 
         const quantity = parseFloat(quantityStr || '0');
-        const ingredient = ingredients.find(ing => ing.name === ingredientName);
-        
+        const ingredient = currentIngredients.find(ing => ing.name === ingredientNameRaw);
         if (!ingredient) {
-          console.warn(`재료를 찾을 수 없습니다: ${ingredientName}`);
+          failures.push(`행 ${idx + 2}: 재료를 찾을 수 없습니다: ${ingredientNameRaw}`);
           return;
         }
 
@@ -270,37 +301,40 @@ export function PrepManagementPage() {
           quantity
         }];
 
-        // 보충 날짜 파싱 (YYYY-MM-DD 형식)
-        const validReplenishDates = replenishDates
-          .filter(d => d && /^\d{4}-\d{2}-\d{2}$/.test(d))
-          .sort();
+        const validReplenishDates = replenishDatesRaw.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
 
-        const totalCost = calculateTotalCost(prepIngredients);
-        const replenishHistory = validReplenishDates;
-        
-        newPreps.push({
-          id: String(Date.now() + index),
-          name,
+        const totalCost = calculateTotalCostForPrep(prepIngredients, currentIngredients);
+
+        const newPrep: Prep = {
+          id: String(Date.now() + idx),
+          name: nameRaw,
           ingredients: prepIngredients,
-          replenishHistory,
-          nextReplenishDate: calculateExpectedReplenishDate({ 
-            replenishHistory, 
-            id: '', 
-            name: '', 
-            ingredients: [], 
-            totalCost: 0, 
-            createdAt: '', 
-            updatedAt: '' 
+          replenishHistory: validReplenishDates,
+          nextReplenishDate: calculateExpectedReplenishDate({
+            id: String(Date.now() + idx),
+            name: nameRaw,
+            ingredients: prepIngredients,
+            replenishHistory: validReplenishDates,
+            totalCost,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           }) || undefined,
           totalCost,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        });
+        };
+
+        newPreps.push(newPrep);
       });
 
       savePreps([...existingPreps, ...newPreps]);
       loadData();
-      alert(`${newPreps.length}개의 프렙이 추가되었습니다.`);
+      const successCount = newPreps.length;
+      if (failures.length === 0) {
+        alert(`${successCount}개의 프렙이 추가되었습니다.`);
+      } else {
+        alert(`${successCount}개 추가, ${failures.length}개 실패:\n${failures.slice(0,5).join('\n')}`);
+      }
     };
 
     reader.readAsText(file, 'UTF-8');
