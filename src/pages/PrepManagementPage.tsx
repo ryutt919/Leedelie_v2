@@ -17,22 +17,32 @@ export function PrepManagementPage() {
   useEffect(() => {
     loadData();
   }, []);
+import { useState, useEffect, type ChangeEvent } from 'react';
+import { Card } from '../components/Card';
+import { Button } from '../components/Button';
+import { Input } from '../components/Input';
+import { loadPreps, savePreps, deletePrep } from '../storage';
+import { loadIngredients, saveIngredients } from '../storage';
+import { exportPrepsToXlsx, exportPrepsToCsv } from '../generator';
+import type { Prep, PrepIngredient, Ingredient } from '../types';
+
+export function PrepManagementPage() {
+  const [preps, setPreps] = useState<Prep[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [expandedPreps, setExpandedPreps] = useState<Set<string>>(new Set());
+  const [editingPrep, setEditingPrep] = useState<Prep | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  useEffect(() => { loadData(); }, []);
 
   const loadData = () => {
     const loadedIngredients = loadIngredients();
     const loadedPreps = loadPreps();
-    
-    // 프렙의 총 비용과 예상 보충 날짜를 재계산하여 업데이트
-    const updatedPreps = loadedPreps.map(prep => {
-      const totalCost = calculateTotalCostForPrep(prep.ingredients, loadedIngredients);
-      const expectedDate = calculateExpectedReplenishDate(prep);
-      return { 
-        ...prep, 
-        totalCost,
-        nextReplenishDate: expectedDate || prep.nextReplenishDate
-      };
-    });
-    
+    const updatedPreps = loadedPreps.map(prep => ({
+      ...prep,
+      totalCost: calculateTotalCostForPrep(prep.ingredients, loadedIngredients),
+      nextReplenishDate: calculateExpectedReplenishDate(prep) || prep.nextReplenishDate
+    }));
     setIngredients(loadedIngredients);
     setPreps(updatedPreps);
   };
@@ -40,358 +50,151 @@ export function PrepManagementPage() {
   const calculateTotalCostForPrep = (prepIngredients: PrepIngredient[], ingredientsList: Ingredient[]): number => {
     return prepIngredients.reduce((total, prepIng) => {
       const ingredient = ingredientsList.find(i => i.id === prepIng.ingredientId);
-      if (ingredient) {
-        return total + (ingredient.unitPrice * prepIng.quantity);
-      }
-      return total;
+      return ingredient ? total + (ingredient.unitPrice * prepIng.quantity) : total;
     }, 0);
   };
 
-  const calculateTotalCost = (prepIngredients: PrepIngredient[]): number => {
-    return calculateTotalCostForPrep(prepIngredients, ingredients);
-  };
+  const calculateTotalCost = (prepIngredients: PrepIngredient[]) => calculateTotalCostForPrep(prepIngredients, ingredients);
 
-  const toggleExpand = (prepId: string) => {
-    const newExpanded = new Set(expandedPreps);
-    if (newExpanded.has(prepId)) {
-      newExpanded.delete(prepId);
-    } else {
-      newExpanded.add(prepId);
-    }
-    setExpandedPreps(newExpanded);
-  };
+  const toggleExpand = (prepId: string) => { const newExpanded = new Set(expandedPreps); newExpanded.has(prepId) ? newExpanded.delete(prepId) : newExpanded.add(prepId); setExpandedPreps(newExpanded); };
 
-  // 보충 간격의 평균을 계산 (일 단위)
   const calculateAverageReplenishInterval = (replenishHistory: string[]): number | null => {
     if (replenishHistory.length < 2) return null;
-    
     const intervals: number[] = [];
     for (let i = 1; i < replenishHistory.length; i++) {
-      const prevDate = new Date(replenishHistory[i - 1]);
-      const currDate = new Date(replenishHistory[i]);
-      const diffTime = currDate.getTime() - prevDate.getTime();
-      const diffDays = diffTime / (1000 * 60 * 60 * 24);
-      intervals.push(diffDays);
+      const prev = new Date(replenishHistory[i - 1]);
+      const cur = new Date(replenishHistory[i]);
+      intervals.push((cur.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
     }
-    
-    const average = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
-    return Math.round(average);
+    return Math.round(intervals.reduce((s, v) => s + v, 0) / intervals.length);
   };
 
-  // 예상 보충 날짜 계산
   const calculateExpectedReplenishDate = (prep: Prep): string | null => {
-    if (prep.replenishHistory.length === 0) return null;
-    
-    const averageInterval = calculateAverageReplenishInterval(prep.replenishHistory);
-    if (averageInterval === null) return null;
-    
-    const lastReplenishDate = new Date(prep.replenishHistory[prep.replenishHistory.length - 1]);
-    const expectedDate = new Date(lastReplenishDate);
-    expectedDate.setDate(expectedDate.getDate() + averageInterval);
-    
-    return expectedDate.toISOString().split('T')[0];
+    if (!prep.replenishHistory || prep.replenishHistory.length === 0) return null;
+    const avg = calculateAverageReplenishInterval(prep.replenishHistory);
+    if (avg === null) return null;
+    const last = new Date(prep.replenishHistory[prep.replenishHistory.length - 1]);
+    last.setDate(last.getDate() + avg);
+    return last.toISOString().split('T')[0];
   };
 
-  const handleAddPrep = () => {
-    const newPrep: Prep = {
-      id: String(Date.now()),
-      name: '',
-      ingredients: [],
-      replenishHistory: [],
-      totalCost: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    setEditingPrep(newPrep);
-    setShowAddForm(true);
-  };
+  const handleAddPrep = () => { setEditingPrep({ id: String(Date.now()), name: '', ingredients: [], replenishHistory: [], totalCost: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setShowAddForm(true); };
 
-  const handleEditPrep = (prep: Prep) => {
-    setEditingPrep({ ...prep });
-    setShowAddForm(true);
-  };
+  const handleEditPrep = (prep: Prep) => { setEditingPrep({ ...prep }); setShowAddForm(true); };
 
   const handleSavePrep = () => {
-    if (!editingPrep || !editingPrep.name.trim()) {
-      alert('프렙 이름을 입력해주세요.');
-      return;
-    }
-
+    if (!editingPrep || !editingPrep.name.trim()) { alert('프렙 이름을 입력해주세요.'); return; }
     const totalCost = calculateTotalCost(editingPrep.ingredients);
     const expectedDate = calculateExpectedReplenishDate(editingPrep);
-    const prepToSave: Prep = {
-      ...editingPrep,
-      totalCost,
-      nextReplenishDate: expectedDate || undefined,
-      updatedAt: new Date().toISOString()
-    };
-
+    const prepToSave: Prep = { ...editingPrep, totalCost, nextReplenishDate: expectedDate || undefined, updatedAt: new Date().toISOString() };
     const existingPreps = loadPreps();
     const existingIndex = existingPreps.findIndex(p => p.id === prepToSave.id);
-    
-    if (existingIndex >= 0) {
-      existingPreps[existingIndex] = prepToSave;
-    } else {
-      existingPreps.push(prepToSave);
-    }
-    
-    savePreps(existingPreps);
-    loadData();
-    setShowAddForm(false);
-    setEditingPrep(null);
+    if (existingIndex >= 0) existingPreps[existingIndex] = prepToSave; else existingPreps.push(prepToSave);
+    savePreps(existingPreps); loadData(); setShowAddForm(false); setEditingPrep(null);
   };
 
   const handleAddReplenishDate = (prepId: string, date: string) => {
-    const prep = preps.find(p => p.id === prepId);
-    if (!prep) return;
-
+    const prep = preps.find(p => p.id === prepId); if (!prep) return;
     const newHistory = [...prep.replenishHistory, date].sort();
-    const updatedPrep: Prep = {
-      ...prep,
-      replenishHistory: newHistory,
-      nextReplenishDate: calculateExpectedReplenishDate({ ...prep, replenishHistory: newHistory }) || undefined,
-      updatedAt: new Date().toISOString()
-    };
-
-    const existingPreps = loadPreps();
-    const index = existingPreps.findIndex(p => p.id === prepId);
-    if (index >= 0) {
-      existingPreps[index] = updatedPrep;
-      savePreps(existingPreps);
-    }
+    const updatedPrep: Prep = { ...prep, replenishHistory: newHistory, nextReplenishDate: calculateExpectedReplenishDate({ ...prep, replenishHistory: newHistory }) || undefined, updatedAt: new Date().toISOString() };
+    const existingPreps = loadPreps(); const idx = existingPreps.findIndex(p => p.id === prepId); if (idx >= 0) { existingPreps[idx] = updatedPrep; savePreps(existingPreps); }
     loadData();
   };
 
   const handleRemoveReplenishDate = (prepId: string, dateToRemove: string) => {
-    const prep = preps.find(p => p.id === prepId);
-    if (!prep) return;
-
+    const prep = preps.find(p => p.id === prepId); if (!prep) return;
     const newHistory = prep.replenishHistory.filter(d => d !== dateToRemove);
-    const updatedPrep: Prep = {
-      ...prep,
-      replenishHistory: newHistory,
-      nextReplenishDate: calculateExpectedReplenishDate({ ...prep, replenishHistory: newHistory }) || undefined,
-      updatedAt: new Date().toISOString()
-    };
-
-    const existingPreps = loadPreps();
-    const index = existingPreps.findIndex(p => p.id === prepId);
-    if (index >= 0) {
-      existingPreps[index] = updatedPrep;
-      savePreps(existingPreps);
-    }
+    const updatedPrep: Prep = { ...prep, replenishHistory: newHistory, nextReplenishDate: calculateExpectedReplenishDate({ ...prep, replenishHistory: newHistory }) || undefined, updatedAt: new Date().toISOString() };
+    const existingPreps = loadPreps(); const idx = existingPreps.findIndex(p => p.id === prepId); if (idx >= 0) { existingPreps[idx] = updatedPrep; savePreps(existingPreps); }
     loadData();
   };
 
-  const handleDeletePrep = (id: string) => {
-    if (confirm('정말 삭제하시겠습니까?')) {
-      deletePrep(id);
-      loadData();
-    }
-  };
+  const handleDeletePrep = (id: string) => { if (confirm('정말 삭제하시겠습니까?')) { deletePrep(id); loadData(); } };
 
-  const handleAddIngredient = () => {
-    if (!editingPrep) return;
-    const newIngredient: PrepIngredient = {
-      ingredientId: '',
-      ingredientName: '',
-      quantity: 0
-    };
-    setEditingPrep({
-      ...editingPrep,
-      ingredients: [...editingPrep.ingredients, newIngredient]
-    });
-  };
+  const handleAddIngredient = () => { if (!editingPrep) return; const newIngredient: PrepIngredient = { ingredientId: '', ingredientName: '', quantity: 0 }; setEditingPrep({ ...editingPrep, ingredients: [...editingPrep.ingredients, newIngredient] }); };
 
-  const handleRemoveIngredient = (index: number) => {
-    if (!editingPrep) return;
-    setEditingPrep({
-      ...editingPrep,
-      ingredients: editingPrep.ingredients.filter((_, i) => i !== index)
-    });
-  };
+  const handleRemoveIngredient = (index: number) => { if (!editingPrep) return; setEditingPrep({ ...editingPrep, ingredients: editingPrep.ingredients.filter((_, i) => i !== index) }); };
 
   const handleIngredientChange = (index: number, field: keyof PrepIngredient, value: string | number) => {
-    if (!editingPrep) return;
-    const updated = [...editingPrep.ingredients];
-    updated[index] = { ...updated[index], [field]: value };
-    
-    // ingredientId가 변경되면 ingredientName도 업데이트
-    if (field === 'ingredientId') {
-      const ingredient = ingredients.find(i => i.id === value);
-      if (ingredient) {
-        updated[index].ingredientName = ingredient.name;
-      }
-    }
-    
+    if (!editingPrep) return; const updated = [...editingPrep.ingredients]; updated[index] = { ...updated[index], [field]: value };
+    if (field === 'ingredientId') { const ingredient = ingredients.find(i => i.id === value); if (ingredient) updated[index].ingredientName = ingredient.name; }
     setEditingPrep({ ...editingPrep, ingredients: updated });
   };
 
-  // 간단한 CSV 한 줄 파서: 큰따옴표로 감싼 필드와 내부 쉼표 처리
+  // CSV helper
   const parseCsvLine = (line: string): string[] => {
-    const res: string[] = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        inQuotes = !inQuotes;
-        continue;
-      }
-      if (ch === ',' && !inQuotes) {
-        res.push(cur);
-        cur = '';
-        continue;
-      }
-      cur += ch;
-    }
-    res.push(cur);
-    return res.map(s => s.replace(/\uFEFF/g, '').trim());
+    const res: string[] = []; let cur = ''; let inQuotes = false;
+    for (let i = 0; i < line.length; i++) { const ch = line[i]; if (ch === '"') { inQuotes = !inQuotes; continue; } if (ch === ',' && !inQuotes) { res.push(cur); cur = ''; continue; } cur += ch; }
+    res.push(cur); return res.map(s => s.replace(/\uFEFF/g, '').trim());
   };
-
   const normalizeField = (s?: string) => (s || '').replace(/\uFEFF/g, '').replace(/^"|"$/g, '').trim();
 
+  // CSV 업로드: 같은 프렙명은 하나로 합치고, 누락 재료는 자동 생성(중복시 확인)
   const handleCSVUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
+    const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(line => line.trim());
-      if (lines.length < 2) {
-        alert('CSV 파일 형식이 올바르지 않습니다.');
-        return;
-      }
-
+      const text = event.target?.result as string; const lines = text.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length < 2) { alert('CSV 파일 형식이 올바르지 않습니다.'); return; }
       const dataLines = lines.slice(1);
-      const newPreps: Prep[] = [];
-      const existingPreps = loadPreps();
-      const currentIngredients = loadIngredients();
-      // 작업 중 재료 목록(기존 + 새로 추가될 것) 복사
-      const ingredientList: Ingredient[] = [...currentIngredients];
-      const addedIngredients: Ingredient[] = [];
-      let idCounter = Date.now();
+      const existingPreps = loadPreps(); const currentIngredients = loadIngredients(); const ingredientList: Ingredient[] = [...currentIngredients]; const failures: string[] = []; let idCounter = Date.now();
 
-      const failures: string[] = [];
+      const prepMap = new Map<string, { id: string; name: string; ingredients: PrepIngredient[]; replenishSet: Set<string>; createdAt: string; updatedAt: string; }>();
 
       dataLines.forEach((line, idx) => {
-        const parts = parseCsvLine(line);
-        if (parts.length < 3) {
-          failures.push(`행 ${idx + 2}: 필드 수 부족`);
-          return;
-        }
-
-        const nameRaw = normalizeField(parts[0]);
-        const ingredientNameRaw = normalizeField(parts[1]);
-        const quantityStr = normalizeField(parts[2]);
-        const replenishDatesRaw = parts.slice(3).map(normalizeField).filter(Boolean);
-
-        if (!nameRaw || !ingredientNameRaw) {
-          failures.push(`행 ${idx + 2}: 이름 또는 재료명 누락`);
-          return;
-        }
-
+        const parts = parseCsvLine(line); if (parts.length < 3) { failures.push(`행 ${idx + 2}: 필드 수 부족`); return; }
+        const nameRaw = normalizeField(parts[0]); const ingredientNameRaw = normalizeField(parts[1]); const quantityStr = normalizeField(parts[2]); const replenishDatesRaw = parts.slice(3).map(normalizeField).filter(Boolean);
+        if (!nameRaw || !ingredientNameRaw) { failures.push(`행 ${idx + 2}: 이름 또는 재료명 누락`); return; }
         const quantity = parseFloat(quantityStr || '0');
-        // 재료 찾기 (ingredientList에서 탐색)
+        // ingredient find/create
         let ingredient = ingredientList.find(ing => ing.name === ingredientNameRaw);
         if (!ingredient) {
-          // 같은 이름(대소문자 무시)으로 기존에 등록된 재료가 있는지 확인
           const existingByName = ingredientList.find(ing => ing.name.toLowerCase() === ingredientNameRaw.toLowerCase());
           if (existingByName) {
-            // 사용자에게 덮어쓰기 여부 확인
             const doOverwrite = confirm(`재료 '${ingredientNameRaw}'이(가) 이미 존재합니다. 덮어쓰시겠습니까?`);
-            if (doOverwrite) {
-              // 덮어쓰기: 기존 항목을 기본값(이름만)으로 덮어씀
-              existingByName.name = ingredientNameRaw;
-              existingByName.price = 0 as any;
-              existingByName.purchaseUnit = 1 as any;
-              existingByName.unitPrice = 0 as any;
-              ingredient = existingByName;
-            } else {
-              // 덮어쓰지 않음: 기존 항목 사용
-              ingredient = existingByName;
-            }
+            if (doOverwrite) { existingByName.name = ingredientNameRaw; existingByName.price = 0 as any; existingByName.purchaseUnit = 1 as any; existingByName.unitPrice = 0 as any; ingredient = existingByName; } else { ingredient = existingByName; }
           } else {
-            // 새 재료 생성
-            idCounter += 1;
-            const newIng: Ingredient = {
-              id: String(idCounter),
-              name: ingredientNameRaw,
-              price: 0,
-              purchaseUnit: 1,
-              unitPrice: 0
-            };
-            ingredientList.push(newIng);
-            addedIngredients.push(newIng);
-            ingredient = newIng;
+            idCounter += 1; const newIng: Ingredient = { id: String(idCounter), name: ingredientNameRaw, price: 0, purchaseUnit: 1, unitPrice: 0 }; ingredientList.push(newIng); ingredient = newIng;
           }
         }
 
-        const prepIngredients: PrepIngredient[] = [{
-          ingredientId: ingredient.id,
-          ingredientName: ingredient.name,
-          quantity
-        }];
+        let prepEntry = prepMap.get(nameRaw);
+        if (!prepEntry) { prepEntry = { id: String(idCounter++), name: nameRaw, ingredients: [], replenishSet: new Set<string>(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; prepMap.set(nameRaw, prepEntry); }
 
-        const validReplenishDates = replenishDatesRaw.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-
-        const totalCost = calculateTotalCostForPrep(prepIngredients, currentIngredients);
-
-        const newPrep: Prep = {
-          id: String(Date.now() + idx),
-          name: nameRaw,
-          ingredients: prepIngredients,
-          replenishHistory: validReplenishDates,
-          nextReplenishDate: calculateExpectedReplenishDate({
-            id: String(Date.now() + idx),
-            name: nameRaw,
-            ingredients: prepIngredients,
-            replenishHistory: validReplenishDates,
-            totalCost,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }) || undefined,
-          totalCost,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        newPreps.push(newPrep);
+        const existingPi = prepEntry.ingredients.find(pi => pi.ingredientId === ingredient.id);
+        if (existingPi) existingPi.quantity = (existingPi.quantity || 0) + quantity; else prepEntry.ingredients.push({ ingredientId: ingredient.id, ingredientName: ingredient.name, quantity });
+        replenishDatesRaw.forEach(d => { if (/^\d{4}-\d{2}-\d{2}$/.test(d)) prepEntry!.replenishSet.add(d); });
       });
 
-      // 새로 추가되거나 덮어쓴 재료를 로컬스토리지에 반영
-      saveIngredients(ingredientList);
-      savePreps([...existingPreps, ...newPreps]);
-      loadData();
-      const successCount = newPreps.length;
-      if (failures.length === 0) {
-        alert(`${successCount}개의 프렙이 추가되었습니다.`);
-      } else {
-        alert(`${successCount}개 추가, ${failures.length}개 실패:\n${failures.slice(0,5).join('\n')}`);
-      }
+      const newPreps: Prep[] = Array.from(prepMap.values()).map(p => {
+        const replenishHistory = Array.from(p.replenishSet).sort(); const totalCost = calculateTotalCostForPrep(p.ingredients, ingredientList);
+        return { id: p.id, name: p.name, ingredients: p.ingredients, replenishHistory, nextReplenishDate: calculateExpectedReplenishDate({ id: p.id, name: p.name, ingredients: p.ingredients, replenishHistory, totalCost, createdAt: p.createdAt, updatedAt: p.updatedAt }) || undefined, totalCost, createdAt: p.createdAt, updatedAt: p.updatedAt } as Prep;
+      });
+
+      saveIngredients(ingredientList); savePreps([...existingPreps, ...newPreps]); loadData(); const successCount = newPreps.length; if (failures.length === 0) alert(`${successCount}개의 프렙이 추가되었습니다.`); else alert(`${successCount}개 추가, ${failures.length}개 실패:\n${failures.slice(0,5).join('\n')}`);
     };
-
-    reader.readAsText(file, 'UTF-8');
-    e.target.value = ''; // 파일 input 초기화
+    reader.readAsText(file, 'UTF-8'); e.target.value = '';
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '미설정';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ko-KR');
-  };
+  const handleResetPreps = () => { if (!confirm('정말 모든 프렙을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return; if (!confirm('진짜로 초기화?')) return; savePreps([]); loadData(); alert('모든 프렙이 초기화되었습니다.'); };
+  const handleResetIngredients = () => { if (!confirm('정말 모든 재료를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return; if (!confirm('진짜로 초기화?')) return; saveIngredients([]); loadData(); alert('모든 재료가 초기화되었습니다.'); };
+
+  const formatDate = (dateString?: string) => { if (!dateString) return '미설정'; const date = new Date(dateString); return date.toLocaleDateString('ko-KR'); };
 
   return (
     <div className="container">
       <h1>프렙 관리</h1>
-       <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
+      <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
       <div className="actions" style={{ marginBottom: '1.5rem' }}>
-        <Button variant="primary" onClick={handleAddPrep}>
-          프렙 추가
-        </Button>
+        <Button variant="primary" onClick={handleAddPrep}>프렙 추가</Button>
         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
           CSV 업로드
+          <input type="file" accept=".csv" onChange={handleCSVUpload} style={{ display: 'none' }} />
+        </label>
+        <Button variant="secondary" onClick={() => exportPrepsToXlsx(preps)}>엑셀 내보내기</Button>
+        <Button variant="secondary" onClick={() => exportPrepsToCsv(preps)}>CSV 내보내기</Button>
+        <Button variant="danger" onClick={handleResetPreps} style={{ marginLeft: 8 }}>프렙 초기화</Button>
+        <Button variant="danger" onClick={handleResetIngredients} style={{ marginLeft: 8 }}>재료 초기화</Button>
+      </div>
           <input
             type="file"
             accept=".csv"
