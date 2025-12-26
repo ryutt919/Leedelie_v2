@@ -176,20 +176,7 @@ export function PrepManagementPage() {
         <Button variant="danger" onClick={handleResetPreps} style={{ marginLeft: 8 }}>프렙 초기화</Button>
         <Button variant="danger" onClick={handleResetIngredients} style={{ marginLeft: 8 }}>재료 초기화</Button>
       </div>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCSVUpload}
-            style={{ display: 'none' }}
-          />
-        </label>
-        <Button variant="secondary" onClick={() => exportPrepsToXlsx(preps)}>
-          엑셀 내보내기
-        </Button>
-        <Button variant="secondary" onClick={() => exportPrepsToCsv(preps)}>
-          CSV 내보내기
-        </Button>
-      </div>
+      
 
       {showAddForm && editingPrep && (
         <Card title={editingPrep.id ? '프렙 수정' : '프렙 추가'}>
