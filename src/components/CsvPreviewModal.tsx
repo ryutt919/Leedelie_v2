@@ -56,7 +56,7 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
       if (ex.ingredients && Array.isArray(ex.ingredients) && ex.ingredients.length > 0) {
         ex.ingredients.forEach((ing: any) => lefts.push(`재료 : ${String(ing.ingredientName || ing.name || ing.ingredient || '')}`));
       } else if (ex.name) {
-        lefts.push(`프렙명 : ${String(ex.name)}`);
+        lefts.push(`프렙/소스명 : ${String(ex.name)}`);
       }
       if (ex.name && ex.purchaseUnit !== undefined) {
         // ingredient object
@@ -70,7 +70,7 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     if (ingName) {
       lefts.push(`재료 : ${String(ingName)}`);
     } else if (parsed.prepName || parsed.name) {
-      lefts.push(`프렙명 : ${String(parsed.prepName || parsed.name)}`);
+      lefts.push(`프렙/소스명 : ${String(parsed.prepName || parsed.name)}`);
     }
 
     return lefts;
@@ -93,10 +93,10 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'grid', gridTemplateColumns: `${maxLeftChars}ch auto`, gap: '9ch', alignItems: 'center' }}>
-            <div><strong>재료 :</strong> {ingName}</div>
-            {price !== undefined ? <div><strong>구매 가격 :</strong> {price}</div> : <div />}
+            <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>재료 :</strong> {ingName}</div>
+            {price !== undefined ? <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>구매 가격 :</strong> {price}</div> : <div />}
           </div>
-          {purchaseUnit !== undefined ? <div><strong>구매 단위 :</strong> {purchaseUnit}</div> : null}
+          {purchaseUnit !== undefined ? <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>구매 단위 :</strong> {purchaseUnit}</div> : null}
         </div>
       );
     }
@@ -109,12 +109,12 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {pName ? <div><strong>프렙명 :</strong> {pName}</div> : null}
+        {pName ? <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>프렙/소스명 :</strong> {pName}</div> : null}
         {iName || qty ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'grid', gridTemplateColumns: `${maxLeftChars}ch auto`, gap: '9ch', alignItems: 'center' }}>
-              <div><strong>재료 :</strong> {iName}</div>
-              {qty !== undefined && qty !== '' ? <div><strong>투입량 :</strong> {qty}</div> : <div />}
+              <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>재료 :</strong> {iName}</div>
+              {qty !== undefined && qty !== '' ? <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>투입량 :</strong> {qty}</div> : <div />}
             </div>
           </div>
         ) : null}
@@ -129,9 +129,9 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     if (existing.hasOwnProperty('purchaseUnit') || existing.hasOwnProperty('unitPrice')) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div><strong>재료 :</strong> {existing.name}</div>
-          <div><strong>구매 가격 :</strong> {existing.price}</div>
-          <div><strong>구매 단위 :</strong> {existing.purchaseUnit}</div>
+          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>재료 :</strong> {existing.name}</div>
+          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>구매 가격 :</strong> {existing.price}</div>
+          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>구매 단위 :</strong> {existing.purchaseUnit}</div>
         </div>
       );
     }
@@ -140,13 +140,13 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     if (existing.hasOwnProperty('ingredients')) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div><strong>프렙명 :</strong> {existing.name}</div>
+          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>프렙/소스명 :</strong> {existing.name}</div>
           {Array.isArray(existing.ingredients) && existing.ingredients.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {existing.ingredients.map((ing: any, idx: number) => (
                 <div key={idx} style={{ display: 'grid', gridTemplateColumns: `${maxLeftChars}ch auto`, gap: '9ch', alignItems: 'center' }}>
-                  <div><strong>재료 :</strong> {ing.ingredientName || ing.name || ing.ingredient}</div>
-                  <div><strong>투입량 :</strong> {ing.quantity}</div>
+                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>재료 :</strong> {ing.ingredientName || ing.name || ing.ingredient}</div>
+                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><strong>투입량 :</strong> {ing.quantity}</div>
                 </div>
               ))}
             </div>

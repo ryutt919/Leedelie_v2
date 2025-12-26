@@ -68,7 +68,7 @@ export function PrepManagementPage() {
   const handleEditPrep = (prep: Prep) => { setEditingPrep({ ...prep }); setShowAddForm(true); };
 
   const handleSavePrep = () => {
-    if (!editingPrep || !editingPrep.name.trim()) { alert('프렙 이름을 입력해주세요.'); return; }
+    if (!editingPrep || !editingPrep.name.trim()) { alert('프렙/소스 이름을 입력해주세요.'); return; }
     const totalCost = calculateTotalCost(editingPrep.ingredients);
     const expectedDate = calculateExpectedReplenishDate(editingPrep);
     const prepToSave: Prep = { ...editingPrep, totalCost, nextReplenishDate: expectedDate || undefined, updatedAt: new Date().toISOString() };
@@ -114,7 +114,7 @@ export function PrepManagementPage() {
   };
   const normalizeField = (s?: string) => (s || '').replace(/\uFEFF/g, '').replace(/^"|"$/g, '').trim();
 
-  // CSV 업로드: 같은 프렙명은 하나로 합치고, 누락 재료는 자동 생성(중복시 확인)
+  // CSV 업로드: 같은 프렙/소스명은 하나로 합치고, 누락 재료는 자동 생성(중복시 확인)
   const handleCSVUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader();
     reader.onload = (event) => {
@@ -142,7 +142,7 @@ export function PrepManagementPage() {
         const rowNumber = idx + 2;
         const parsed: Record<string, any> = { prepName: nameRaw, ingredientName: ingredientNameRaw, quantity: quantityStr, replenishDates: replenishDatesRaw };
         const validationErrors: string[] = [];
-        if (!nameRaw) validationErrors.push('프렙명 누락');
+        if (!nameRaw) validationErrors.push('프렙/소스명 누락');
         if (!ingredientNameRaw) validationErrors.push('재료명 누락');
         if (quantityStr && isNaN(parseFloat(quantityStr))) validationErrors.push('수량 숫자 형식 오류');
 
@@ -153,7 +153,7 @@ export function PrepManagementPage() {
           : undefined;
         const recommendedAction: CsvAction = detectedMatch ? 'merge' : 'create';
 
-        // 자동 무시: 동일한 프렙이 존재하고, 해당 프렙이 이미 같은 재료/수량을 포함하며 보충 날짜도 동일하면 미리보기에 추가하지 않음
+        // 자동 무시: 동일한 프렙/소스이 존재하고, 해당 프렙/소스이 이미 같은 재료/수량을 포함하며 보충 날짜도 동일하면 미리보기에 추가하지 않음
         if (detectedMatch && detectedMatch.existing) {
           const exPrep = detectedMatch.existing as Prep;
           const qtyNum = parseFloat(String(parsed.quantity || '0') || '0');
@@ -181,34 +181,34 @@ export function PrepManagementPage() {
     setShowPreview(false);
     setPreviewItems([]);
     loadData();
-    alert(`${result.created || 0}개의 프렙이 생성/병합되었습니다.`);
+    alert(`${result.created || 0}개의 프렙/소스이 생성/병합되었습니다.`);
   };
 
-  const handleResetPreps = () => { if (!confirm('정말 모든 프렙을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return; if (!confirm('진짜로 초기화?')) return; savePreps([]); loadData(); alert('모든 프렙이 초기화되었습니다.'); };
+  const handleResetPreps = () => { if (!confirm('정말 모든 프렙/소스을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return; if (!confirm('진짜로 초기화?')) return; savePreps([]); loadData(); alert('모든 프렙/소스이 초기화되었습니다.'); };
 
   const formatDate = (dateString?: string) => { if (!dateString) return '미설정'; const date = new Date(dateString); return date.toLocaleDateString('ko-KR'); };
 
   return (
     <div className="container">
-      <h1>프렙 관리</h1>
+      <h1>프렙/소스 관리</h1>
       <p>csv 구조 : 이름,재료명,수량,보충날짜1(2025-12-20)..</p>
       <div className="actions" style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <Button variant="primary" onClick={handleAddPrep}>프렙 추가</Button>
+        <Button variant="primary" onClick={handleAddPrep}>프렙/소스 추가</Button>
         <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
           CSV 업로드
           <input type="file" accept=".csv" onChange={handleCSVUpload} style={{ display: 'none' }} />
         </label>
         <Button variant="secondary" onClick={() => exportPrepsToXlsx(preps)}>엑셀 내보내기</Button>
         <Button variant="secondary" onClick={() => exportPrepsToCsv(preps)}>CSV 내보내기</Button>
-        <Button variant="danger" onClick={handleResetPreps} >프렙 초기화</Button>
+        <Button variant="danger" onClick={handleResetPreps} >프렙/소스 초기화</Button>
       </div>
       <CsvPreviewModal items={previewItems} open={showPreview} onClose={() => setShowPreview(false)} onApply={handleApplyPreview} />
 
       {showAddForm && editingPrep && (
-        <Card title={editingPrep.id ? '프렙 수정' : '프렙 추가'}>
+        <Card title={editingPrep.id ? '프렙/소스 수정' : '프렙/소스 추가'}>
           <div className="form-row">
             <div className="input-group">
-              <label>프렙 이름</label>
+              <label>프렙/소스 이름</label>
               <Input
                 value={editingPrep.name}
                 onChange={(e) => setEditingPrep({ ...editingPrep, name: e.target.value })}
@@ -323,7 +323,7 @@ export function PrepManagementPage() {
 
       <div className="schedules-list">
         {preps.length === 0 ? (
-          <div className="empty-message">등록된 프렙이 없습니다.</div>
+          <div className="empty-message">등록된 프렙/소스이 없습니다.</div>
         ) : (
           preps.map(prep => (
             <Card key={prep.id}>
@@ -355,7 +355,7 @@ export function PrepManagementPage() {
                   }}>
                     <span>다음 보충 예상 날짜: {formatDate(prep.nextReplenishDate)}</span>
                     <span style={{ fontWeight: 'bold' }}>
-                      프렙 총 재료 비용: {prep.totalCost.toLocaleString('ko-KR')}원
+                      프렙/소스 총 재료 비용: {prep.totalCost.toLocaleString('ko-KR')}원
                     </span>
                   </div>
                 </div>
