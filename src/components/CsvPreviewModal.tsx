@@ -13,7 +13,7 @@ type Props = {
 export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
   const [actions, setActions] = useState<Record<number, CsvAction>>(() => {
     const map: Record<number, CsvAction> = {};
-    items.forEach(it => { map[it.rowNumber] = 'create'; });
+    items.forEach(it => { map[it.rowNumber] = 'update'; });
     return map;
   });
   const [bulkAction, setBulkAction] = useState<CsvAction>('create');
@@ -26,7 +26,7 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     setSelected(sel);
     // reset actions defaults
     const act: Record<number, CsvAction> = {};
-    items.forEach(it => { act[it.rowNumber] = 'create'; });
+    items.forEach(it => { act[it.rowNumber] = 'update'; });
     setActions(act);
   }, [items]);
 
@@ -34,6 +34,10 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
 
   const handleChange = (row: number, action: CsvAction) => {
     setActions(prev => ({ ...prev, [row]: action }));
+  };
+
+  const handleToggleAction = (row: number) => {
+    setActions(prev => ({ ...prev, [row]: prev[row] === 'skip' ? 'update' : 'skip' }));
   };
 
   const toggleSelect = (row: number) => {
@@ -133,7 +137,6 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
             <div style={{ fontSize: 13, color: '#555' }}>행 수: {items.length}</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <select value={bulkAction} onChange={(e) => setBulkAction(e.target.value as CsvAction)}>
-                <option value="create">모두 추가</option>
                 <option value="update">모두 갱신</option>
                 <option value="skip">모두 무시</option>
               </select>
@@ -161,11 +164,9 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
                   </td>
                   <td style={{ padding: '8px 4px', verticalAlign: 'top', wordBreak: 'break-word' }}>{renderParsedSummary(it.parsed)}</td>
                   <td style={{ padding: '8px 4px', verticalAlign: 'top' }}>
-                    <select value={actions[it.rowNumber]} onChange={(e) => handleChange(it.rowNumber, e.target.value as CsvAction)}>
-                      <option value="create">추가</option>
-                      <option value="update">갱신</option>
-                      <option value="skip">무시</option>
-                    </select>
+                    <button onClick={() => handleToggleAction(it.rowNumber)} style={{ padding: '6px 10px', cursor: 'pointer' }}>
+                      {actions[it.rowNumber] === 'skip' ? '무시' : '갱신'}
+                    </button>
                   </td>
                 </tr>
               ))}
