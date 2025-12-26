@@ -67,7 +67,6 @@ export function CsvPreviewModal({ items, open, onClose, onApply }: Props) {
     // parsed
     const parsed = it.parsed || {};
     const ingName = parsed.ingredientName || parsed.name || parsed['ingredientName'] || parsed['ingredient'];
-    const qty = parsed.quantity || parsed.qty || parsed['수량'];
     if (ingName) {
       lefts.push(`재료 : ${String(ingName)}`);
     } else if (parsed.prepName || parsed.name) {
