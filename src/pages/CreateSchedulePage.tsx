@@ -33,9 +33,12 @@ import { DEFAULT_WORK_RULES, loadWorkRules, saveWorkRules } from '../storage/wor
 import { daysInMonthISO } from '../utils/date'
 import { newId } from '../utils/id'
 import { exportScheduleXlsx } from '../utils/scheduleExport'
+import type { CellRenderInfo } from '@rc-component/picker/interface'
+
+const EMPTY_STAFF: StaffMember[] = []
 
 export function CreateSchedulePage() {
-  const { token } = theme.useToken()
+  void theme.useToken()
   const [sp] = useSearchParams()
   const editId = sp.get('editId') ?? undefined
 
@@ -246,7 +249,8 @@ export function CreateSchedulePage() {
     exportScheduleXlsx(temp)
   }
 
-  const staff: StaffMember[] = Form.useWatch('staff', form) ?? []
+  const watchedStaff = Form.useWatch('staff', form) as StaffMember[] | undefined
+  const staff: StaffMember[] = watchedStaff ?? EMPTY_STAFF
   const staffCount: number = Form.useWatch('staffCount', form) ?? staff.length ?? 0
   const ymWatch: Dayjs = Form.useWatch('ym', form) ?? dayjs()
   const workRulesWatch: WorkRules = Form.useWatch('workRules', form) ?? DEFAULT_WORK_RULES
@@ -264,31 +268,77 @@ export function CreateSchedulePage() {
     return found ? normalizeRequest(found) : normalizeRequest({ dateISO: iso })
   }, [requests, selectedDate])
 
-  const cellRender = (d: Dayjs) => {
+  const reqByDate = useMemo(() => {
+    const m = new Map<string, DayRequest>()
+    for (const r of requests) m.set(r.dateISO, normalizeRequest(r))
+    return m
+  }, [requests])
+
+  const staffNameById = useMemo(() => new Map(staff.map((s) => [s.id, s.name || '이름없음'])), [staff])
+
+  const shiftLabel = (s: Shift) => (s === 'open' ? '오픈' : s === 'middle' ? '미들' : '마감')
+
+  const renderRequestPills = (d: Dayjs) => {
     const iso = d.format('YYYY-MM-DD')
-    const r0 = requests.find((x) => x.dateISO === iso)
-    const r = r0 ? normalizeRequest(r0) : null
-    if (!r) return null
+    const r = reqByDate.get(iso)
 
-    // 선택 직원(단일) 기준 하이라이트
-    const sid = selectedStaffId
-    const off = sid ? r.offStaffIds.includes(sid) : false
-    const half = sid ? r.halfStaff.some((x) => x.staffId === sid) : false
+    const { year, month } = currentYm()
+    const inMonth = d.year() === year && d.month() + 1 === month
 
-    const blue = token.colorPrimaryBg // 파랑 계열
-    const orange = token.colorWarningBg // 주황 계열
-    const bg =
-      off && half ? `linear-gradient(90deg, ${blue} 0 50%, ${orange} 50% 100%)` : off ? blue : half ? orange : undefined
+    const pills: Array<{ key: string; kind: 'half' | 'off'; text: string }> = []
+    if (r) {
+      // 이미지 예시처럼 하프(주황) → 휴무(파랑) 순으로
+      for (const h of r.halfStaff) {
+        const nm = staffNameById.get(h.staffId) ?? h.staffId
+        pills.push({
+          key: `half_${h.staffId}`,
+          kind: 'half',
+          text: `(${nm}/하프/${shiftLabel(h.shift)})`,
+        })
+      }
+      for (const sid of r.offStaffIds) {
+        const nm = staffNameById.get(sid) ?? sid
+        pills.push({
+          key: `off_${sid}`,
+          kind: 'off',
+          text: `(${nm}/휴무)`,
+        })
+      }
+    }
 
-    const deltaTag = r.needDelta > 0 ? `+${r.needDelta}` : null
+    const visible = pills.slice(0, 2)
+    const rest = Math.max(0, pills.length - visible.length)
 
     return (
-      <div style={{ padding: 2, borderRadius: 8, background: bg }}>
-        <div style={{ fontSize: 11, color: token.colorTextSecondary }}>
-          {off ? '휴무' : null}
-          {off && half ? ' / ' : null}
-          {half ? '하프' : null}
-          {deltaTag ? ` · ${deltaTag}` : null}
+      <div className="leedeli-cal-cellContent" style={{ opacity: inMonth ? 1 : 0.35 }}>
+        <div className="leedeli-cal-pills">
+          {visible.map((p) => (
+            <Tag
+              key={p.key}
+              color={p.kind === 'half' ? 'orange' : 'blue'}
+              style={{
+                marginInlineEnd: 0,
+                borderRadius: 999,
+                padding: '1px 8px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                pointerEvents: 'none', // 셀 클릭이 항상 동작하도록
+              }}
+            >
+              {p.text}
+            </Tag>
+          ))}
+          {rest > 0 ? (
+            <Tag
+              style={{
+                marginInlineEnd: 0,
+                borderRadius: 999,
+                padding: '1px 8px',
+                pointerEvents: 'none',
+              }}
+            >{`+${rest}`}</Tag>
+          ) : null}
         </div>
       </div>
     )
@@ -519,14 +569,34 @@ export function CreateSchedulePage() {
             value={selectedDate}
             onSelect={(d) => {
               setSelectedDate(d)
+            }}
+            cellRender={(d: Dayjs, info: CellRenderInfo<Dayjs>) => {
+              if (info.type !== 'date') return info.originNode
+
               const iso = d.format('YYYY-MM-DD')
               const { year, month } = currentYm()
               const validDates = new Set(daysInMonthISO(year, month))
-              if (validDates.has(iso)) {
-                toggleForSelected(iso)
-              }
+              const canToggle = validDates.has(iso)
+
+              return (
+                <div
+                  className="leedeli-cal-cellWrap"
+                  onMouseDown={(e) => {
+                    // Tag 등을 눌러도 선택/토글이 누락되지 않도록 클릭을 셀 전체로 고정
+                    e.preventDefault()
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setSelectedDate(d)
+                    if (canToggle) toggleForSelected(iso)
+                  }}
+                >
+                  {info.originNode}
+                  {renderRequestPills(d)}
+                </div>
+              )
             }}
-            cellRender={(d) => <div>{cellRender(d)}</div>}
           />
 
           <Card size="small" title={`선택 날짜: ${selectedDate.format('YYYY-MM-DD')}`}>

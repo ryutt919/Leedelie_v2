@@ -39,3 +39,25 @@ a {
   max-width: 520px;
   margin: 0 auto;
 }
+
+/* Calendar cell: request pills (CreateSchedule) */
+.leedeli-cal-cellContent {
+  margin-top: 4px;
+}
+
+.leedeli-cal-cellWrap {
+  height: 100%;
+}
+
+.leedeli-cal-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  max-height: 52px; /* 2줄 + +N 정도만 보이도록 */
+}
+
+.leedeli-cal-pills .ant-tag {
+  line-height: 18px;
+  font-size: 12px;
+}
