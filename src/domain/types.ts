@@ -27,7 +27,14 @@ export type DayRequest = {
   dateISO: string // YYYY-MM-DD
   offStaffIds: Id[]
   halfStaff: Array<{ staffId: Id; shift: Shift }>
-  needBoost: boolean // base -> base+1 (or +0.5 in later polish)
+  /**
+   * 날짜별 필요 인원 조정값(근무 규칙 DAILY_STAFF_BASE 대비 Δ).
+   * - 0.5 단위(0, 0.5, 1.0 ...)
+   * - 실제 필요 인원 = clamp(BASE + Δ, BASE, MAX)
+   */
+  needDelta: number
+  /** @deprecated 하위 호환용(구버전 데이터) */
+  needBoost?: boolean
 }
 
 export type ScheduleAssignment = {

@@ -68,9 +68,17 @@ export function generateSchedule(input: ScheduleInputs): { assignments: Schedule
   const assignments: ScheduleAssignment[] = []
 
   for (const dateISO of dates) {
-    const req = reqByDate.get(dateISO) ?? { dateISO, offStaffIds: [], halfStaff: [], needBoost: false }
-    const baseNeed = input.workRules.DAILY_STAFF_BASE + (req.needBoost ? 1 : 0)
-    const need = Math.min(input.workRules.DAILY_STAFF_MAX, baseNeed)
+    const req =
+      reqByDate.get(dateISO) ??
+      ({
+        dateISO,
+        offStaffIds: [],
+        halfStaff: [],
+        needDelta: 0,
+      } satisfies DayRequest)
+    const delta = Number.isFinite(req.needDelta) ? req.needDelta : req.needBoost ? 1 : 0
+    const baseNeed = input.workRules.DAILY_STAFF_BASE + delta
+    const need = Math.min(input.workRules.DAILY_STAFF_MAX, Math.max(input.workRules.DAILY_STAFF_BASE, baseNeed))
 
     const assignedIds = new Set<string>()
     const byShift: Record<Shift, Array<{ staffId: string; unit: 1 | 0.5 }>> = { open: [], middle: [], close: [] }

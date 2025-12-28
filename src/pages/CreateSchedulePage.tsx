@@ -14,8 +14,9 @@ import {
   Modal,
   Select,
   Space,
-  Switch,
+  Tag,
   Typography,
+  theme,
   message,
 } from 'antd'
 import dayjs, { Dayjs } from 'dayjs'
@@ -34,13 +35,14 @@ import { newId } from '../utils/id'
 import { exportScheduleXlsx } from '../utils/scheduleExport'
 
 export function CreateSchedulePage() {
+  const { token } = theme.useToken()
   const [sp] = useSearchParams()
   const editId = sp.get('editId') ?? undefined
 
   const [form] = Form.useForm()
 
   const [selectedDate, setSelectedDate] = useState<Dayjs>(() => dayjs())
-  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([])
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
   const [mode, setMode] = useState<'off' | 'half'>('off')
   const [halfShift, setHalfShift] = useState<Shift>('middle')
 
@@ -52,6 +54,22 @@ export function CreateSchedulePage() {
   const [presetModalOpen, setPresetModalOpen] = useState(false)
   const [presetName, setPresetName] = useState('')
   const [presets, setPresets] = useState<StaffPreset[]>(() => loadStaffPresets())
+
+  const normalizeRequest = (r: Partial<DayRequest> & { dateISO: string }): DayRequest => {
+    const base: DayRequest = {
+      dateISO: r.dateISO,
+      offStaffIds: (r.offStaffIds ?? []) as string[],
+      halfStaff: (r.halfStaff ?? []) as Array<{ staffId: string; shift: Shift }>,
+      needDelta: 0,
+    }
+    const legacyBoost = (r as { needBoost?: boolean }).needBoost
+    const delta = Number.isFinite((r as { needDelta?: number }).needDelta)
+      ? Number((r as { needDelta?: number }).needDelta)
+      : legacyBoost
+        ? 1
+        : 0
+    return { ...base, needDelta: delta }
+  }
 
   useEffect(() => {
     const workRules = loadWorkRules()
@@ -66,7 +84,7 @@ export function CreateSchedulePage() {
         year = s.year
         month = s.month
         staff = s.staff
-        loadedRequests = s.requests
+        loadedRequests = (s.requests ?? []).map((r) => normalizeRequest(r))
         setResult({ assignments: s.assignments, stats: s.stats })
       }
     }
@@ -82,7 +100,7 @@ export function CreateSchedulePage() {
       ]
     }
 
-    setRequests(loadedRequests)
+    setRequests(loadedRequests.map((r) => normalizeRequest(r)))
     form.setFieldsValue({
       ym: dayjs(`${year}-${String(month).padStart(2, '0')}-01`),
       workRules,
@@ -90,7 +108,7 @@ export function CreateSchedulePage() {
       staff,
     })
     setSelectedDate(dayjs(`${year}-${String(month).padStart(2, '0')}-01`))
-    setSelectedStaffIds(staff.slice(0, 1).map((x) => x.id))
+    setSelectedStaffId(staff[0]?.id ?? null)
   }, [editId, form])
 
   const getInput = (): ScheduleInputs => {
@@ -121,42 +139,42 @@ export function CreateSchedulePage() {
     setRequests((prev) => {
       const idx = prev.findIndex((x) => x.dateISO === dateISO)
       if (idx >= 0) return prev
-      return [...prev, { dateISO, offStaffIds: [], halfStaff: [], needBoost: false }]
+      return [...prev, normalizeRequest({ dateISO })]
     })
   }
 
   const updateRequest = (dateISO: string, patch: Partial<DayRequest>) => {
     setRequests((prev) => {
       const idx = prev.findIndex((x) => x.dateISO === dateISO)
-      if (idx < 0) return [...prev, { dateISO, offStaffIds: [], halfStaff: [], needBoost: false, ...patch }]
+      if (idx < 0) return [...prev, { ...normalizeRequest({ dateISO }), ...patch }]
       const next = [...prev]
-      next[idx] = { ...next[idx], ...patch }
+      next[idx] = normalizeRequest({ ...next[idx], ...patch, dateISO })
       return next
     })
   }
 
   const toggleForSelected = (dateISO: string) => {
+    if (!selectedStaffId) return
     ensureRequest(dateISO)
     setRequests((prev) => {
       const idx = prev.findIndex((x) => x.dateISO === dateISO)
-      const r = idx >= 0 ? prev[idx] : { dateISO, offStaffIds: [], halfStaff: [], needBoost: false }
-      const next: DayRequest = { ...r, offStaffIds: [...r.offStaffIds], halfStaff: [...r.halfStaff] }
+      const r = idx >= 0 ? prev[idx] : normalizeRequest({ dateISO })
+      const next: DayRequest = normalizeRequest({ ...r, dateISO })
 
-      for (const sid of selectedStaffIds) {
-        if (mode === 'off') {
-          // off 토글, half는 제거
-          const off = new Set(next.offStaffIds)
-          if (off.has(sid)) off.delete(sid)
-          else off.add(sid)
-          next.offStaffIds = [...off]
-          next.halfStaff = next.halfStaff.filter((x) => x.staffId !== sid)
-        } else {
-          // half 토글, off 제거
-          next.offStaffIds = next.offStaffIds.filter((x) => x !== sid)
-          const hitIdx = next.halfStaff.findIndex((x) => x.staffId === sid)
-          if (hitIdx >= 0) next.halfStaff.splice(hitIdx, 1)
-          else next.halfStaff.push({ staffId: sid, shift: halfShift })
-        }
+      const sid = selectedStaffId
+      if (mode === 'off') {
+        // off 토글, half는 제거
+        const off = new Set(next.offStaffIds)
+        if (off.has(sid)) off.delete(sid)
+        else off.add(sid)
+        next.offStaffIds = [...off]
+        next.halfStaff = next.halfStaff.filter((x) => x.staffId !== sid)
+      } else {
+        // half 토글, off 제거
+        next.offStaffIds = next.offStaffIds.filter((x) => x !== sid)
+        const hitIdx = next.halfStaff.findIndex((x) => x.staffId === sid)
+        if (hitIdx >= 0) next.halfStaff.splice(hitIdx, 1) // 이미 하프면 해제
+        else next.halfStaff.push({ staffId: sid, shift: halfShift })
       }
 
       const out = [...prev]
@@ -231,6 +249,7 @@ export function CreateSchedulePage() {
   const staff: StaffMember[] = Form.useWatch('staff', form) ?? []
   const staffCount: number = Form.useWatch('staffCount', form) ?? staff.length ?? 0
   const ymWatch: Dayjs = Form.useWatch('ym', form) ?? dayjs()
+  const workRulesWatch: WorkRules = Form.useWatch('workRules', form) ?? DEFAULT_WORK_RULES
 
   useEffect(() => {
     // 연/월 변경 시 캘린더 선택 날짜를 해당 월 1일로 정렬
@@ -241,20 +260,38 @@ export function CreateSchedulePage() {
 
   const requestForSelectedDate = useMemo(() => {
     const iso = selectedDate.format('YYYY-MM-DD')
-    return requests.find((r) => r.dateISO === iso) ?? { dateISO: iso, offStaffIds: [], halfStaff: [], needBoost: false }
+    const found = requests.find((r) => r.dateISO === iso)
+    return found ? normalizeRequest(found) : normalizeRequest({ dateISO: iso })
   }, [requests, selectedDate])
 
   const cellRender = (d: Dayjs) => {
     const iso = d.format('YYYY-MM-DD')
-    const r = requests.find((x) => x.dateISO === iso)
+    const r0 = requests.find((x) => x.dateISO === iso)
+    const r = r0 ? normalizeRequest(r0) : null
     if (!r) return null
-    const tags: string[] = []
-    if (r.offStaffIds.length) tags.push(`휴 ${r.offStaffIds.length}`)
-    if (r.halfStaff.length) tags.push(`하 ${r.halfStaff.length}`)
-    if (r.needBoost) tags.push('+1')
-    return tags.length ? (
-      <div style={{ fontSize: 11, color: 'rgba(0,0,0,0.65)' }}>{tags.join(' · ')}</div>
-    ) : null
+
+    // 선택 직원(단일) 기준 하이라이트
+    const sid = selectedStaffId
+    const off = sid ? r.offStaffIds.includes(sid) : false
+    const half = sid ? r.halfStaff.some((x) => x.staffId === sid) : false
+
+    const blue = token.colorPrimaryBg // 파랑 계열
+    const orange = token.colorWarningBg // 주황 계열
+    const bg =
+      off && half ? `linear-gradient(90deg, ${blue} 0 50%, ${orange} 50% 100%)` : off ? blue : half ? orange : undefined
+
+    const deltaTag = r.needDelta > 0 ? `+${r.needDelta}` : null
+
+    return (
+      <div style={{ padding: 2, borderRadius: 8, background: bg }}>
+        <div style={{ fontSize: 11, color: token.colorTextSecondary }}>
+          {off ? '휴무' : null}
+          {off && half ? ' / ' : null}
+          {half ? '하프' : null}
+          {deltaTag ? ` · ${deltaTag}` : null}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -344,7 +381,7 @@ export function CreateSchedulePage() {
                   next = next.slice(0, nextCount)
                 }
                 form.setFieldValue('staff', next)
-                if (!selectedStaffIds.length && next.length) setSelectedStaffIds([next[0].id])
+                if (!selectedStaffId && next.length) setSelectedStaffId(next[0].id)
               }}
             />
           </Form.Item>
@@ -438,17 +475,15 @@ export function CreateSchedulePage() {
       <Card size="small" title="휴무/하프 요청" style={{ marginTop: 12 }}>
         <Space direction="vertical" style={{ width: '100%' }} size={10}>
           <Typography.Text type="secondary">
-            직원 선택 → 모드(휴무/하프) → 날짜 클릭으로 토글
+            직원 선택(1명) → 모드(휴무/하프) → 날짜 클릭 즉시 토글
           </Typography.Text>
 
           <Flex gap={8} wrap>
             {staff.slice(0, staffCount).map((s) => (
               <Button
                 key={s.id}
-                type={selectedStaffIds.includes(s.id) ? 'primary' : 'default'}
-                onClick={() =>
-                  setSelectedStaffIds((prev) => (prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id]))
-                }
+                type={selectedStaffId === s.id ? 'primary' : 'default'}
+                onClick={() => setSelectedStaffId(s.id)}
               >
                 {s.name || '이름없음'}
               </Button>
@@ -477,14 +512,6 @@ export function CreateSchedulePage() {
                 onChange={(v) => setHalfShift(v)}
               />
             ) : null}
-            <Button
-              onClick={() => {
-                const iso = selectedDate.format('YYYY-MM-DD')
-                toggleForSelected(iso)
-              }}
-            >
-              선택 날짜 토글
-            </Button>
           </Flex>
 
           <Calendar
@@ -496,19 +523,50 @@ export function CreateSchedulePage() {
               const { year, month } = currentYm()
               const validDates = new Set(daysInMonthISO(year, month))
               if (validDates.has(iso)) {
-                // 그냥 선택만
+                toggleForSelected(iso)
               }
             }}
             cellRender={(d) => <div>{cellRender(d)}</div>}
           />
 
           <Card size="small" title={`선택 날짜: ${selectedDate.format('YYYY-MM-DD')}`}>
-            <Flex align="center" justify="space-between">
-              <Typography.Text>필요 인원 +1</Typography.Text>
-              <Switch
-                checked={requestForSelectedDate.needBoost}
-                onChange={(checked) => updateRequest(requestForSelectedDate.dateISO, { needBoost: checked })}
-              />
+            <Flex align="center" justify="space-between" wrap gap={8}>
+              <Space>
+                <Typography.Text>필요 인원</Typography.Text>
+                <Tag color="blue">
+                  {Number((workRulesWatch.DAILY_STAFF_BASE + requestForSelectedDate.needDelta).toFixed(2))}명
+                </Tag>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  (기본 {workRulesWatch.DAILY_STAFF_BASE} + Δ {requestForSelectedDate.needDelta})
+                </Typography.Text>
+              </Space>
+              <Space>
+                <Button
+                  onClick={() => {
+                    const base = workRulesWatch.DAILY_STAFF_BASE
+                    const max = workRulesWatch.DAILY_STAFF_MAX
+                    const maxDelta = Math.max(0, max - base)
+                    const nextDelta = Math.max(0, Math.min(maxDelta, requestForSelectedDate.needDelta - 0.5))
+                    updateRequest(requestForSelectedDate.dateISO, { needDelta: nextDelta })
+                  }}
+                  disabled={requestForSelectedDate.needDelta <= 0}
+                >
+                  -0.5
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    const base = workRulesWatch.DAILY_STAFF_BASE
+                    const max = workRulesWatch.DAILY_STAFF_MAX
+                    const maxDelta = Math.max(0, max - base)
+                    const nextDelta = Math.max(0, Math.min(maxDelta, requestForSelectedDate.needDelta + 0.5))
+                    updateRequest(requestForSelectedDate.dateISO, { needDelta: nextDelta })
+                  }}
+                  disabled={workRulesWatch.DAILY_STAFF_BASE + requestForSelectedDate.needDelta >= workRulesWatch.DAILY_STAFF_MAX}
+                >
+                  +0.5
+                </Button>
+              </Space>
             </Flex>
           </Card>
         </Space>
@@ -621,7 +679,7 @@ export function CreateSchedulePage() {
                 if (!p) return
                 form.setFieldValue('staffCount', p.staff.length)
                 form.setFieldValue('staff', p.staff)
-                setSelectedStaffIds(p.staff.slice(0, 1).map((x) => x.id))
+                setSelectedStaffId(p.staff[0]?.id ?? null)
                 message.success('불러오기 완료')
                 setPresetModalOpen(false)
               }}
