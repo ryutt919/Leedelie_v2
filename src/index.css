@@ -58,6 +58,16 @@ a {
 }
 
 .leedeli-cal-pills .ant-tag {
-  line-height: 18px;
-  font-size: 12px;
+  line-height: 16px;
+  font-size: 10px;
+}
+
+/* Calendar pills should be visible in the content area */
+.ant-picker-calendar-date-content {
+  overflow: visible !important;
+}
+
+/* 캘린더 날짜 숫자 폰트 크기 */
+.ant-picker-calendar-mini .ant-picker-calendar-date-value {
+  font-size: 10px;
 }

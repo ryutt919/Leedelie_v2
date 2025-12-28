@@ -92,15 +92,15 @@ export function CreateSchedulePage() {
       }
     }
 
+    // 직원이 없으면 최대 인원만큼 빈 직원 생성
     if (!staff.length) {
-      staff = [
-        {
-          id: newId(),
-          name: '',
-          availableShifts: ['open', 'middle', 'close'],
-          priority: { open: 3, middle: 3, close: 3 },
-        },
-      ]
+      const maxCount = workRules.DAILY_STAFF_MAX
+      staff = Array.from({ length: maxCount }, () => ({
+        id: newId(),
+        name: '',
+        availableShifts: ['open', 'middle', 'close'] as const,
+        priority: { open: 3, middle: 3, close: 3 },
+      }))
     }
 
     setRequests(loadedRequests.map((r) => normalizeRequest(r)))
@@ -138,14 +138,6 @@ export function CreateSchedulePage() {
     return { year: ym.year(), month: ym.month() + 1 }
   }
 
-  const ensureRequest = (dateISO: string) => {
-    setRequests((prev) => {
-      const idx = prev.findIndex((x) => x.dateISO === dateISO)
-      if (idx >= 0) return prev
-      return [...prev, normalizeRequest({ dateISO })]
-    })
-  }
-
   const updateRequest = (dateISO: string, patch: Partial<DayRequest>) => {
     setRequests((prev) => {
       const idx = prev.findIndex((x) => x.dateISO === dateISO)
@@ -158,7 +150,7 @@ export function CreateSchedulePage() {
 
   const toggleForSelected = (dateISO: string) => {
     if (!selectedStaffId) return
-    ensureRequest(dateISO)
+    // ensureRequest는 제거 - setRequests 안에서 이미 idx < 0 처리함
     setRequests((prev) => {
       const idx = prev.findIndex((x) => x.dateISO === dateISO)
       const r = idx >= 0 ? prev[idx] : normalizeRequest({ dateISO })
@@ -177,7 +169,20 @@ export function CreateSchedulePage() {
         next.offStaffIds = next.offStaffIds.filter((x) => x !== sid)
         const hitIdx = next.halfStaff.findIndex((x) => x.staffId === sid)
         if (hitIdx >= 0) next.halfStaff.splice(hitIdx, 1) // 이미 하프면 해제
-        else next.halfStaff.push({ staffId: sid, shift: halfShift })
+        else {
+          // 선호 시프트: preferredShift > priority 최고값 > halfShift 순
+          const member = staff.find((s) => s.id === sid)
+          let shift: Shift = halfShift
+          if (member?.preferredShift) {
+            shift = member.preferredShift
+          } else if (member?.priority) {
+            const best = (['open', 'middle', 'close'] as Shift[]).reduce((a, b) =>
+              (member.priority[b] ?? 0) > (member.priority[a] ?? 0) ? b : a
+            )
+            shift = best
+          }
+          next.halfStaff.push({ staffId: sid, shift })
+        }
       }
 
       const out = [...prev]
@@ -276,8 +281,6 @@ export function CreateSchedulePage() {
 
   const staffNameById = useMemo(() => new Map(staff.map((s) => [s.id, s.name || '이름없음'])), [staff])
 
-  const shiftLabel = (s: Shift) => (s === 'open' ? '오픈' : s === 'middle' ? '미들' : '마감')
-
   const renderRequestPills = (d: Dayjs) => {
     const iso = d.format('YYYY-MM-DD')
     const r = reqByDate.get(iso)
@@ -287,13 +290,13 @@ export function CreateSchedulePage() {
 
     const pills: Array<{ key: string; kind: 'half' | 'off'; text: string }> = []
     if (r) {
-      // 이미지 예시처럼 하프(주황) → 휴무(파랑) 순으로
+      // 이름만 표시 (하프: 주황, 휴무: 파랑)
       for (const h of r.halfStaff) {
         const nm = staffNameById.get(h.staffId) ?? h.staffId
         pills.push({
           key: `half_${h.staffId}`,
           kind: 'half',
-          text: `(${nm}/하프/${shiftLabel(h.shift)})`,
+          text: nm,
         })
       }
       for (const sid of r.offStaffIds) {
@@ -301,7 +304,7 @@ export function CreateSchedulePage() {
         pills.push({
           key: `off_${sid}`,
           kind: 'off',
-          text: `(${nm}/휴무)`,
+          text: nm,
         })
       }
     }
@@ -412,7 +415,7 @@ export function CreateSchedulePage() {
           <Form.Item name="staffCount" label="인원 수" initialValue={staff.length || 1}>
             <InputNumber
               min={1}
-              max={20}
+              max={workRulesWatch.DAILY_STAFF_MAX}
               style={{ width: '100%' }}
               onChange={(n) => {
                 const nextCount = Number(n ?? 1)
@@ -533,7 +536,11 @@ export function CreateSchedulePage() {
               <Button
                 key={s.id}
                 type={selectedStaffId === s.id ? 'primary' : 'default'}
-                onClick={() => setSelectedStaffId(s.id)}
+                onClick={() => {
+                  setSelectedStaffId(s.id)
+                  // 선택한 직원의 preferredShift를 하프 시프트 기본값으로 설정
+                  if (s.preferredShift) setHalfShift(s.preferredShift)
+                }}
               >
                 {s.name || '이름없음'}
               </Button>
@@ -541,19 +548,22 @@ export function CreateSchedulePage() {
           </Flex>
 
           <Flex gap={8} wrap align="center">
-            <Select
-              value={mode}
-              style={{ width: 120 }}
-              options={[
-                { label: '휴무', value: 'off' },
-                { label: '하프', value: 'half' },
-              ]}
-              onChange={(v) => setMode(v)}
-            />
+            <Button
+              type={mode === 'off' ? 'primary' : 'default'}
+              onClick={() => setMode('off')}
+            >
+              휴무
+            </Button>
+            <Button
+              type={mode === 'half' ? 'primary' : 'default'}
+              onClick={() => setMode('half')}
+            >
+              하프
+            </Button>
             {mode === 'half' ? (
               <Select
                 value={halfShift}
-                style={{ width: 120 }}
+                style={{ width: 100 }}
                 options={[
                   { label: '오픈', value: 'open' },
                   { label: '미들', value: 'middle' },
@@ -569,30 +579,16 @@ export function CreateSchedulePage() {
             value={selectedDate}
             onSelect={(d) => {
               setSelectedDate(d)
+              const iso = d.format('YYYY-MM-DD')
+              const { year, month } = currentYm()
+              const validDates = new Set(daysInMonthISO(year, month))
+              if (validDates.has(iso)) toggleForSelected(iso)
             }}
             cellRender={(d: Dayjs, info: CellRenderInfo<Dayjs>) => {
               if (info.type !== 'date') return info.originNode
 
-              const iso = d.format('YYYY-MM-DD')
-              const { year, month } = currentYm()
-              const validDates = new Set(daysInMonthISO(year, month))
-              const canToggle = validDates.has(iso)
-
               return (
-                <div
-                  className="leedeli-cal-cellWrap"
-                  onMouseDown={(e) => {
-                    // Tag 등을 눌러도 선택/토글이 누락되지 않도록 클릭을 셀 전체로 고정
-                    e.preventDefault()
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setSelectedDate(d)
-                    if (canToggle) toggleForSelected(iso)
-                  }}
-                >
-                  {info.originNode}
+                <div className="leedeli-cal-cellWrap">
                   {renderRequestPills(d)}
                 </div>
               )
@@ -678,31 +674,43 @@ export function CreateSchedulePage() {
           <Typography.Title level={5} style={{ marginTop: 12 }}>
             일자별 배정
           </Typography.Title>
-          <Collapse
-            size="small"
-            items={result.assignments.map((a) => ({
-              key: a.dateISO,
-              label: a.dateISO,
-              children: (
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  {(['open', 'middle', 'close'] as Shift[]).map((shift) => (
-                    <Flex key={shift} justify="space-between">
-                      <Typography.Text strong>
-                        {shift === 'open' ? '오픈' : shift === 'middle' ? '미들' : '마감'}
-                      </Typography.Text>
-                      <Typography.Text type="secondary">
-                        {a.byShift[shift]
-                          .map((x) => {
-                            const nm = staff.find((s) => s.id === x.staffId)?.name ?? x.staffId
-                            return `${nm}(${x.unit})`
-                          })
-                          .join(' / ') || '-'}
-                      </Typography.Text>
-                    </Flex>
-                  ))}
-                </Space>
-              ),
-            }))}
+          <Calendar
+            fullscreen={false}
+            value={dayjs(`${ymWatch.year()}-${String(ymWatch.month() + 1).padStart(2, '0')}-01`)}
+            cellRender={(d: Dayjs, info: CellRenderInfo<Dayjs>) => {
+              if (info.type !== 'date') return info.originNode
+
+              const iso = d.format('YYYY-MM-DD')
+              const assignment = result.assignments.find((a) => a.dateISO === iso)
+              if (!assignment) return null
+
+              const inMonth = d.month() === ymWatch.month()
+
+              const shiftColors: Record<Shift, string> = { open: '#52c41a', middle: '#1890ff', close: '#722ed1' }
+              const shiftLabels: Record<Shift, string> = { open: '오', middle: '미', close: '마' }
+
+              return (
+                <div className="leedeli-cal-cellContent" style={{ opacity: inMonth ? 1 : 0.35 }}>
+                  <div className="leedeli-cal-pills" style={{ fontSize: 9 }}>
+                    {(['open', 'middle', 'close'] as Shift[]).map((shift) => {
+                      const names = assignment.byShift[shift]
+                        .map((x) => staff.find((s) => s.id === x.staffId)?.name || '?')
+                        .join(',')
+                      if (!names) return null
+                      return (
+                        <Tag
+                          key={shift}
+                          color={shiftColors[shift]}
+                          style={{ marginInlineEnd: 0, borderRadius: 4, padding: '0 3px', fontSize: 9, lineHeight: '14px' }}
+                        >
+                          {shiftLabels[shift]}:{names}
+                        </Tag>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            }}
           />
         </Card>
       ) : null}
