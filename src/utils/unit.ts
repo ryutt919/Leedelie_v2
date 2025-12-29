@@ -1,6 +1,8 @@
 export function normalizeUnitLabel(raw: unknown): string {
-  const s = String(raw ?? '').trim()
+  let s = String(raw ?? '').trim()
   if (!s) return ''
+  // 엑셀 줄바꿈/캐리지리턴 흔적 제거
+  s = s.replace(/_x000d_/gi, '').replace(/\r|\n/g, '').trim()
   // 흔한 표현 통일
   const lower = s.toLowerCase()
   if (lower === 'ea') return '개'

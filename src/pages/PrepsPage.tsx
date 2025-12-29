@@ -37,7 +37,7 @@ import { newId } from '../utils/id'
 import { round2, safeNumber } from '../utils/money'
 import { normalizeUnitLabel, parseAmountAndUnit } from '../utils/unit'
 import { downloadXlsx } from '../utils/xlsxExport'
-import { parseXlsxFileToJsonRows } from '../utils/xlsxImport'
+import { parseXlsxFileToAOA } from '../utils/xlsxImport'
 
 export function PrepsPage() {
   const [tick, setTick] = useState(0)
@@ -227,7 +227,14 @@ export function PrepsPage() {
   }
 
   const buildXlsxPreview = async (file: File) => {
-    const parsed = await parseXlsxFileToJsonRows(file, { preferredSheetName: 'Preps' })
+    const aoa = await parseXlsxFileToAOA(file, { preferredSheetName: 'Preps' })
+
+    if (aoa.length < 2) {
+      const header = aoa[0] ?? []
+      message.error(`엑셀 내용을 인식하지 못했습니다. (행 수=${aoa.length}, 헤더=${JSON.stringify(header).slice(0, 80)})`)
+      return
+    }
+    const dataRows = aoa.slice(1) // 1행(헤더) 무시
 
     // XLSX(내보내기) 포맷 기준:
     // 프렙명, 재료명, 투입량, 보충이력(콤마 구분)
@@ -238,12 +245,12 @@ export function PrepsPage() {
     >()
     const changedIngredients: Ingredient[] = []
 
-    for (let i = 0; i < parsed.length; i++) {
-      const row = parsed[i]
-      const prepNameRaw = String((row['프렙명'] ?? '') as unknown)
-      const ingNameRaw = String((row['재료명'] ?? '') as unknown)
-      const amountRaw = row['투입량']
-      const historyRaw = String((row['보충이력'] ?? '') as unknown)
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = Array.isArray(dataRows[i]) ? (dataRows[i] as unknown[]) : []
+      const prepNameRaw = String(row[0] ?? '') // A: 프렙명/소스명
+      const ingNameRaw = String(row[1] ?? '') // B: 재료명
+      const amountRaw = row[2] // C: 투입량
+      const historyRaw = String(row[3] ?? '') // D: 보충이력(옵션)
 
       const prepName = prepNameRaw.trim()
       const ingName = ingNameRaw.trim()
@@ -251,6 +258,7 @@ export function PrepsPage() {
       const amount = Number.isFinite(parsedAmount.amount) ? parsedAmount.amount : safeNumber(amountRaw, NaN)
       const unitLabel = parsedAmount.unitLabel // 없으면 '' (단위 업데이트 안 함)
       const dates = historyRaw
+        .replace(/_x000d_/gi, '')
         .split(',')
         .map((d) => d.trim())
         .filter(Boolean)

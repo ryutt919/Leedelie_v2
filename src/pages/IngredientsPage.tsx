@@ -11,7 +11,7 @@ import { newId } from '../utils/id'
 import { round2, safeNumber } from '../utils/money'
 import { normalizeUnitLabel, parseAmountAndUnit } from '../utils/unit'
 import { downloadXlsx } from '../utils/xlsxExport'
-import { parseXlsxFileToJsonRows } from '../utils/xlsxImport'
+import { parseXlsxFileToAOA } from '../utils/xlsxImport'
 
 export function IngredientsPage() {
   const [tick, setTick] = useState(0)
@@ -91,14 +91,22 @@ export function IngredientsPage() {
   }
 
   const buildXlsxPreview = async (file: File) => {
-    const parsed = await parseXlsxFileToJsonRows(file, { preferredSheetName: 'Ingredients' })
+    const aoa = await parseXlsxFileToAOA(file, { preferredSheetName: 'Ingredients' })
     const byName = new Map(items.map((x) => [x.name.toLowerCase(), x]))
 
-    const rows: CsvPreviewRow<{ name: string; price: number; unit: number; unitLabel: string }>[] = parsed.map((r, idx) => {
-      const nameRaw = String((r['이름'] ?? '') as unknown)
-      const priceRaw = r['가격']
-      const unitRaw = r['구매단위']
-      const unitLabelRaw = (r['단위'] ?? '') as unknown
+    if (aoa.length < 2) {
+      const header = aoa[0] ?? []
+      message.error(`엑셀 내용을 인식하지 못했습니다. (행 수=${aoa.length}, 헤더=${JSON.stringify(header).slice(0, 80)})`)
+      return
+    }
+    const dataRows = aoa.slice(1) // 1행(헤더) 무시
+
+    const rows: CsvPreviewRow<{ name: string; price: number; unit: number; unitLabel: string }>[] = dataRows.map((r, idx) => {
+      const row = Array.isArray(r) ? (r as unknown[]) : []
+      const nameRaw = String(row[0] ?? '')
+      const priceRaw = row[1]
+      const unitRaw = row[2]
+      const unitLabelRaw = row[3]
 
       const name = nameRaw.trim()
       const price = safeNumber(priceRaw, NaN)
@@ -127,8 +135,8 @@ export function IngredientsPage() {
             : 'create'
 
       return {
-        key: `row_${idx + 1}_${name || 'unknown'}`,
-        rowNo: idx + 1,
+        key: `row_${idx + 2}_${name || 'unknown'}`,
+        rowNo: idx + 2,
         parsed: { name, price, unit, unitLabel },
         parsedLabel: (
           <Space direction="vertical" size={0}>
