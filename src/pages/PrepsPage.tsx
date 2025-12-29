@@ -309,11 +309,7 @@ export function PrepsPage() {
       const ingNames = [...new Set(b.items.map((x) => x.ingredientName).map((s) => String(s ?? '').trim()).filter(Boolean))].sort(
         (a, b) => a.localeCompare(b),
       )
-      const MAX_ING_PREVIEW = 10
-      const ingPreview =
-        ingNames.length <= MAX_ING_PREVIEW
-          ? ingNames.join(', ')
-          : `${ingNames.slice(0, MAX_ING_PREVIEW).join(', ')} 외 ${ingNames.length - MAX_ING_PREVIEW}개`
+      const ingLabel = ingNames.join(', ')
 
       return {
         key: `prep_${idx}_${b.name}`,
@@ -322,15 +318,21 @@ export function PrepsPage() {
         parsedLabel: (
           <Space direction="vertical" size={0}>
             <Typography.Text>{b.name}</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               재료 {b.items.length}개 / 보충 {uniqDates.length}회
             </Typography.Text>
             <Typography.Text
               type="secondary"
-              style={{ fontSize: 11, display: 'block', maxWidth: 360, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-              title={ingNames.join(', ')}
+              style={{
+                fontSize: 11,
+                display: 'block',
+                maxWidth: 360, // 칸 넓이 유지(가로 확장 방지)
+                whiteSpace: 'normal', // 길이에 따라 줄바꿈, 높이(y축) 확장
+                overflowWrap: 'anywhere',
+                lineHeight: 1.25,
+              }}
             >
-              재료: {ingPreview || '-'}
+              재료: {ingLabel || '-'}
             </Typography.Text>
           </Space>
         ),
