@@ -1,9 +1,10 @@
 import type { DayRequest, SavedSchedule, ScheduleAssignment, ScheduleStats, Shift, StaffMember, WorkRules } from './types'
-import { daysInMonthISO } from '../utils/date'
+import dayjs from 'dayjs'
+import { daysInRangeISO, isISODate } from '../utils/date'
 
 export type ScheduleInputs = {
-  year: number
-  month: number
+  startDateISO: string
+  endDateISO: string
   workRules: WorkRules
   staff: StaffMember[]
   requests: DayRequest[]
@@ -11,8 +12,15 @@ export type ScheduleInputs = {
 
 export function validateScheduleInputs(input: ScheduleInputs): string[] {
   const errs: string[] = []
-  if (input.month < 1 || input.month > 12) errs.push('월이 올바르지 않습니다.')
-  if (input.year < 2000 || input.year > 2100) errs.push('연도가 올바르지 않습니다.')
+  if (!isISODate(input.startDateISO)) errs.push('시작일이 올바르지 않습니다.')
+  if (!isISODate(input.endDateISO)) errs.push('종료일이 올바르지 않습니다.')
+  if (isISODate(input.startDateISO) && isISODate(input.endDateISO)) {
+    const s = dayjs(input.startDateISO, 'YYYY-MM-DD', true)
+    const e = dayjs(input.endDateISO, 'YYYY-MM-DD', true)
+    if (e.isBefore(s, 'day')) errs.push('종료일은 시작일 이후여야 합니다.')
+    // 모바일 MVP 방어: 너무 긴 기간은 제한(1년 + 여유)
+    if (e.diff(s, 'day') > 370) errs.push('기간이 너무 깁니다. 371일 이내로 선택하세요.')
+  }
   if (!input.staff.length) errs.push('직원이 1명 이상 필요합니다.')
   for (const s of input.staff) {
     if (!s.name.trim()) errs.push('직원 이름이 비었습니다.')
@@ -30,8 +38,11 @@ export function validateScheduleInputs(input: ScheduleInputs): string[] {
 function shiftQuota(total: number): Record<Shift, number> {
   // 단순 모바일 MVP: 최소 오픈/마감 1명(가능하면), 나머지는 미들
   if (total <= 1) return { open: 0, middle: 1, close: 0 }
-  if (total === 2) return { open: 1, middle: 0, close: 1 }
-  return { open: 1, middle: total - 2, close: 1 }
+  // 요구: 근무 인원이 2명 이상이면 미들도 포함되게
+  // 단, 오픈/마감 최소 1명 규칙은 validateGeneratedSchedule에서 hard-fail로 강제됨.
+  // 여기서는 quota를 최대한 middle을 포함하는 방향으로 배분한다.
+  if (total === 2) return { open: 1, middle: 1, close: 0 }
+  return { open: 1, middle: Math.max(1, total - 2), close: 1 }
 }
 
 function pickBestCandidate({
@@ -59,7 +70,7 @@ function pickBestCandidate({
 }
 
 export function generateSchedule(input: ScheduleInputs): { assignments: ScheduleAssignment[]; stats: ScheduleStats[] } {
-  const dates = daysInMonthISO(input.year, input.month)
+  const dates = daysInRangeISO(input.startDateISO, input.endDateISO)
   const reqByDate = new Map(input.requests.map((r) => [r.dateISO, r]))
 
   const workload = new Map<string, number>() // unit sum
@@ -156,6 +167,22 @@ export function validateGeneratedSchedule(input: ScheduleInputs, assignments: Sc
   const reqByDate = new Map(input.requests.map((r) => [r.dateISO, r]))
   for (const a of assignments) {
     const req = reqByDate.get(a.dateISO)
+    // 오픈/마감 최소 1명 강제(불가능하면 hard fail)
+    const openUnits = a.byShift.open.reduce((sum, x) => sum + x.unit, 0)
+    const closeUnits = a.byShift.close.reduce((sum, x) => sum + x.unit, 0)
+    const MIN_SHIFT_UNITS = 0.5 // 하프(0.5)도 1명으로 인정
+    if (openUnits < MIN_SHIFT_UNITS || closeUnits < MIN_SHIFT_UNITS) {
+      const offCount = req?.offStaffIds?.length ?? 0
+      const availableOpen = input.staff.filter((s) => !req?.offStaffIds.includes(s.id) && s.availableShifts.includes('open')).length
+      const availableClose = input.staff.filter((s) => !req?.offStaffIds.includes(s.id) && s.availableShifts.includes('close')).length
+      const parts: string[] = []
+      if (openUnits < MIN_SHIFT_UNITS) parts.push(`오픈<${MIN_SHIFT_UNITS}`)
+      if (closeUnits < MIN_SHIFT_UNITS) parts.push(`마감<${MIN_SHIFT_UNITS}`)
+      errs.push(
+        `${a.dateISO}: 오픈/마감 최소 0.5 규칙 위반(${parts.join(', ')}). ` +
+          `휴무 ${offCount}명, 가능(오픈 ${availableOpen}명/마감 ${availableClose}명)`
+      )
+    }
     for (const shift of ['open', 'middle', 'close'] as Shift[]) {
       for (const asg of a.byShift[shift]) {
         const staff = input.staff.find((s) => s.id === asg.staffId)
@@ -185,10 +212,15 @@ export function toSavedSchedule({
   stats: ScheduleStats[]
 }): SavedSchedule {
   const now = new Date().toISOString()
+  const start = dayjs(input.startDateISO, 'YYYY-MM-DD', true)
+  const year = start.isValid() ? start.year() : dayjs().year()
+  const month = start.isValid() ? start.month() + 1 : dayjs().month() + 1
   return {
     id,
-    year: input.year,
-    month: input.month,
+    startDateISO: input.startDateISO,
+    endDateISO: input.endDateISO,
+    year,
+    month,
     createdAtISO: now,
     updatedAtISO: now,
     workRules: input.workRules,

@@ -20,7 +20,7 @@ import {
   message,
 } from 'antd'
 import dayjs, { Dayjs } from 'dayjs'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { DayRequest, SavedSchedule, Shift, StaffMember, WorkRules } from '../domain/types'
 import { generateSchedule, toSavedSchedule, validateGeneratedSchedule, validateScheduleInputs } from '../domain/scheduleEngine'
@@ -30,7 +30,7 @@ import { getSchedule, upsertSchedule } from '../storage/schedulesRepo'
 import { loadStaffPresets, upsertStaffPreset } from '../storage/staffPresetsRepo'
 import type { StaffPreset } from '../storage/staffPresetsRepo'
 import { DEFAULT_WORK_RULES, loadWorkRules, saveWorkRules } from '../storage/workRulesRepo'
-import { daysInMonthISO } from '../utils/date'
+import { daysInRangeISO } from '../utils/date'
 import { newId } from '../utils/id'
 import { exportScheduleXlsx } from '../utils/scheduleExport'
 import type { CellRenderInfo } from '@rc-component/picker/interface'
@@ -57,12 +57,14 @@ export function CreateSchedulePage() {
   const [presetModalOpen, setPresetModalOpen] = useState(false)
   const [presetName, setPresetName] = useState('')
   const [presets, setPresets] = useState<StaffPreset[]>(() => loadStaffPresets())
+  const lastRangeWarnAtRef = useRef(0)
 
   const normalizeRequest = (r: Partial<DayRequest> & { dateISO: string }): DayRequest => {
     const base: DayRequest = {
       dateISO: r.dateISO,
-      offStaffIds: (r.offStaffIds ?? []) as string[],
-      halfStaff: (r.halfStaff ?? []) as Array<{ staffId: string; shift: Shift }>,
+      // IMPORTANT: 배열 참조 공유를 끊어야(불변) StrictMode/dev에서 토글이 안정적임
+      offStaffIds: [...(((r.offStaffIds ?? []) as string[]) ?? [])],
+      halfStaff: [...(((r.halfStaff ?? []) as Array<{ staffId: string; shift: Shift }>) ?? [])],
       needDelta: 0,
     }
     const legacyBoost = (r as { needBoost?: boolean }).needBoost
@@ -76,16 +78,17 @@ export function CreateSchedulePage() {
 
   useEffect(() => {
     const workRules = loadWorkRules()
-    let year = dayjs().year()
-    let month = dayjs().month() + 1
+    const today = dayjs()
+    let startDateISO = today.startOf('month').format('YYYY-MM-DD')
+    let endDateISO = today.endOf('month').format('YYYY-MM-DD')
     let staff: StaffMember[] = []
     let loadedRequests: DayRequest[] = []
 
     if (editId) {
       const s = getSchedule(editId)
       if (s) {
-        year = s.year
-        month = s.month
+        startDateISO = s.startDateISO
+        endDateISO = s.endDateISO
         staff = s.staff
         loadedRequests = (s.requests ?? []).map((r) => normalizeRequest(r))
         setResult({ assignments: s.assignments, stats: s.stats })
@@ -105,24 +108,24 @@ export function CreateSchedulePage() {
 
     setRequests(loadedRequests.map((r) => normalizeRequest(r)))
     form.setFieldsValue({
-      ym: dayjs(`${year}-${String(month).padStart(2, '0')}-01`),
+      range: [dayjs(startDateISO), dayjs(endDateISO)],
       workRules,
       staffCount: staff.length,
       staff,
     })
-    setSelectedDate(dayjs(`${year}-${String(month).padStart(2, '0')}-01`))
+    setSelectedDate(dayjs(startDateISO))
     setSelectedStaffId(staff[0]?.id ?? null)
   }, [editId, form])
 
   const getInput = (): ScheduleInputs => {
     const v = form.getFieldsValue(true) as {
-      ym: Dayjs
+      range: [Dayjs, Dayjs]
       workRules: WorkRules
       staff: StaffMember[]
     }
-    const ym = v.ym ?? dayjs()
-    const year = ym.year()
-    const month = ym.month() + 1
+    const range = v.range ?? [dayjs().startOf('month'), dayjs().endOf('month')]
+    const startDateISO = range[0].format('YYYY-MM-DD')
+    const endDateISO = range[1].format('YYYY-MM-DD')
     const workRules = v.workRules ?? DEFAULT_WORK_RULES
     const staff = (v.staff ?? []).map((s) => ({
       ...s,
@@ -130,12 +133,7 @@ export function CreateSchedulePage() {
       availableShifts: s.availableShifts ?? [],
       priority: s.priority ?? { open: 3, middle: 3, close: 3 },
     }))
-    return { year, month, workRules, staff, requests }
-  }
-
-  const currentYm = () => {
-    const ym = (form.getFieldValue('ym') as Dayjs) ?? dayjs()
-    return { year: ym.year(), month: ym.month() + 1 }
+    return { startDateISO, endDateISO, workRules, staff, requests }
   }
 
   const updateRequest = (dateISO: string, patch: Partial<DayRequest>) => {
@@ -167,11 +165,14 @@ export function CreateSchedulePage() {
       } else {
         // half 토글, off 제거
         next.offStaffIds = next.offStaffIds.filter((x) => x !== sid)
-        const hitIdx = next.halfStaff.findIndex((x) => x.staffId === sid)
-        if (hitIdx >= 0) next.halfStaff.splice(hitIdx, 1) // 이미 하프면 해제
-        else {
+        const has = next.halfStaff.some((x) => x.staffId === sid)
+        if (has) {
+          // 이미 하프면 해제 (불변)
+          next.halfStaff = next.halfStaff.filter((x) => x.staffId !== sid)
+        } else {
           // 선호 시프트: preferredShift > priority 최고값 > halfShift 순
-          const member = staff.find((s) => s.id === sid)
+          const currentStaff = (form.getFieldValue('staff') ?? []) as StaffMember[]
+          const member = currentStaff.find((s) => s.id === sid)
           let shift: Shift = halfShift
           if (member?.preferredShift) {
             shift = member.preferredShift
@@ -181,7 +182,7 @@ export function CreateSchedulePage() {
             )
             shift = best
           }
-          next.halfStaff.push({ staffId: sid, shift })
+          next.halfStaff = [...next.halfStaff, { staffId: sid, shift }]
         }
       }
 
@@ -241,8 +242,10 @@ export function CreateSchedulePage() {
     }
     const temp: SavedSchedule = {
       id: 'temp',
-      year: input.year,
-      month: input.month,
+      startDateISO: input.startDateISO,
+      endDateISO: input.endDateISO,
+      year: dayjs(input.startDateISO).year(),
+      month: dayjs(input.startDateISO).month() + 1,
       createdAtISO: new Date().toISOString(),
       updatedAtISO: new Date().toISOString(),
       workRules: input.workRules,
@@ -257,15 +260,25 @@ export function CreateSchedulePage() {
   const watchedStaff = Form.useWatch('staff', form) as StaffMember[] | undefined
   const staff: StaffMember[] = watchedStaff ?? EMPTY_STAFF
   const staffCount: number = Form.useWatch('staffCount', form) ?? staff.length ?? 0
-  const ymWatch: Dayjs = Form.useWatch('ym', form) ?? dayjs()
+  const rangeWatch =
+    ((Form.useWatch('range', form) as [Dayjs, Dayjs] | undefined) ?? [dayjs().startOf('month'), dayjs().endOf('month')])
   const workRulesWatch: WorkRules = Form.useWatch('workRules', form) ?? DEFAULT_WORK_RULES
+  const rangeISO = useMemo(
+    () => ({
+      startDateISO: rangeWatch[0].format('YYYY-MM-DD'),
+      endDateISO: rangeWatch[1].format('YYYY-MM-DD'),
+    }),
+    [rangeWatch]
+  )
+  const validDatesSet = useMemo(() => new Set(daysInRangeISO(rangeISO.startDateISO, rangeISO.endDateISO)), [rangeISO])
 
   useEffect(() => {
-    // 연/월 변경 시 캘린더 선택 날짜를 해당 월 1일로 정렬
-    const next = dayjs(`${ymWatch.year()}-${String(ymWatch.month() + 1).padStart(2, '0')}-01`)
-    if (!selectedDate.isSame(next, 'month')) setSelectedDate(next)
+    // 기간 변경 시 선택 날짜가 범위 밖이면 시작일로 정렬
+    const start = rangeWatch[0]
+    const end = rangeWatch[1]
+    if (selectedDate.isBefore(start, 'day') || selectedDate.isAfter(end, 'day')) setSelectedDate(start)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ymWatch])
+  }, [rangeWatch])
 
   const requestForSelectedDate = useMemo(() => {
     const iso = selectedDate.format('YYYY-MM-DD')
@@ -285,65 +298,78 @@ export function CreateSchedulePage() {
     const iso = d.format('YYYY-MM-DD')
     const r = reqByDate.get(iso)
 
-    const { year, month } = currentYm()
-    const inMonth = d.year() === year && d.month() + 1 === month
+    const inRange = validDatesSet.has(iso)
 
-    const pills: Array<{ key: string; kind: 'half' | 'off'; text: string }> = []
+    const pills: Array<{ key: string; staffId: string; kind: 'half' | 'off'; text: string }> = []
     if (r) {
       // 이름만 표시 (하프: 주황, 휴무: 파랑)
       for (const h of r.halfStaff) {
-        const nm = staffNameById.get(h.staffId) ?? h.staffId
+        const sid = String(h.staffId)
+        const nm = staffNameById.get(sid) ?? sid
         pills.push({
-          key: `half_${h.staffId}`,
+          key: `half_${sid}`,
+          staffId: sid,
           kind: 'half',
           text: nm,
         })
       }
       for (const sid of r.offStaffIds) {
-        const nm = staffNameById.get(sid) ?? sid
+        const s = String(sid)
+        const nm = staffNameById.get(s) ?? s
         pills.push({
-          key: `off_${sid}`,
+          key: `off_${s}`,
+          staffId: s,
           kind: 'off',
           text: nm,
         })
       }
     }
 
-    const visible = pills.slice(0, 2)
-    const rest = Math.max(0, pills.length - visible.length)
+    // 선택된 직원은 배경색으로 표시, 나머지만 pill로 표시
+    const selectedSid = selectedStaffId ? String(selectedStaffId) : null
+    const otherPills = selectedSid ? pills.filter((p) => p.staffId !== selectedSid) : pills
+
+    // 선택된 직원의 휴무/하프 여부 확인
+    const isSelectedOff = !!(selectedSid && r?.offStaffIds.some((x) => String(x) === selectedSid))
+    const isSelectedHalf = !!(selectedSid && r?.halfStaff.some((x) => String(x.staffId) === selectedSid))
+
+    // 배경색 결정 (더 진한 색상)
+    let bgColor = 'transparent'
+    if (isSelectedOff) bgColor = '#bae0ff' // 더 진한 파랑
+    else if (isSelectedHalf) bgColor = '#ffe7ba' // 더 진한 주황
 
     return (
-      <div className="leedeli-cal-cellContent" style={{ opacity: inMonth ? 1 : 0.35 }}>
-        <div className="leedeli-cal-pills">
-          {visible.map((p) => (
-            <Tag
-              key={p.key}
-              color={p.kind === 'half' ? 'orange' : 'blue'}
-              style={{
-                marginInlineEnd: 0,
-                borderRadius: 999,
-                padding: '1px 8px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                pointerEvents: 'none', // 셀 클릭이 항상 동작하도록
-              }}
-            >
-              {p.text}
-            </Tag>
-          ))}
-          {rest > 0 ? (
-            <Tag
-              style={{
-                marginInlineEnd: 0,
-                borderRadius: 999,
-                padding: '1px 8px',
-                pointerEvents: 'none',
-              }}
-            >{`+${rest}`}</Tag>
-          ) : null}
+      <>
+        {/* 배경색 레이어 - 셀 전체를 덮음 */}
+        {bgColor !== 'transparent' && (
+          <div
+            className="leedeli-cal-bg-layer"
+            style={{ background: bgColor }}
+          />
+        )}
+        {/* pill 영역 */}
+        <div className="leedeli-cal-cellContent" style={{ opacity: inRange ? 1 : 0.25 }}>
+          <div className="leedeli-cal-pills">
+            {otherPills.map((p) => (
+              <Tag
+                key={p.key}
+                color={p.kind === 'half' ? 'orange' : 'blue'}
+                style={{
+                  marginInlineEnd: 0,
+                  borderRadius: 999,
+                  padding: '1px 8px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  pointerEvents: 'none',
+                }}
+              >
+                {p.text}
+              </Tag>
+            ))}
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
@@ -363,8 +389,8 @@ export function CreateSchedulePage() {
     >
       <Form form={form} layout="vertical">
         <Card size="small" title="기본 설정">
-          <Form.Item name="ym" label="연/월" rules={[{ required: true, message: '연/월을 선택하세요' }]}>
-            <DatePicker picker="month" style={{ width: '100%' }} />
+          <Form.Item name="range" label="기간(시작~종료)" rules={[{ required: true, message: '기간을 선택하세요' }]}>
+            <DatePicker.RangePicker style={{ width: '100%' }} />
           </Form.Item>
         </Card>
 
@@ -525,7 +551,12 @@ export function CreateSchedulePage() {
         </Card>
       </Form>
 
-      <Card size="small" title="휴무/하프 요청" style={{ marginTop: 12 }}>
+      <Card
+        size="small"
+        title="휴무/하프 요청"
+        style={{ marginTop: 12 }}
+        extra={<Button danger size="small" onClick={() => setRequests([])}>초기화</Button>}
+      >
         <Space direction="vertical" style={{ width: '100%' }} size={10}>
           <Typography.Text type="secondary">
             직원 선택(1명) → 모드(휴무/하프) → 날짜 클릭 즉시 토글
@@ -549,13 +580,15 @@ export function CreateSchedulePage() {
 
           <Flex gap={8} wrap align="center">
             <Button
-              type={mode === 'off' ? 'primary' : 'default'}
+              type="default"
+              className={`leedeli-mode-btn leedeli-mode-btn--off ${mode === 'off' ? 'is-active' : ''}`}
               onClick={() => setMode('off')}
             >
               휴무
             </Button>
             <Button
-              type={mode === 'half' ? 'primary' : 'default'}
+              type="default"
+              className={`leedeli-mode-btn leedeli-mode-btn--half ${mode === 'half' ? 'is-active' : ''}`}
               onClick={() => setMode('half')}
             >
               하프
@@ -574,26 +607,47 @@ export function CreateSchedulePage() {
             ) : null}
           </Flex>
 
-          <Calendar
-            fullscreen={false}
-            value={selectedDate}
-            onSelect={(d) => {
-              setSelectedDate(d)
-              const iso = d.format('YYYY-MM-DD')
-              const { year, month } = currentYm()
-              const validDates = new Set(daysInMonthISO(year, month))
-              if (validDates.has(iso)) toggleForSelected(iso)
-            }}
-            cellRender={(d: Dayjs, info: CellRenderInfo<Dayjs>) => {
-              if (info.type !== 'date') return info.originNode
+          <div
+            onClickCapture={(e) => {
+              // 셀 전체(td) 클릭을 위임으로 처리: 날짜 숫자 영역 클릭/재클릭에서도 토글이 항상 동작하게
+              const el = e.target as HTMLElement | null
+              const td = el?.closest?.('td.ant-picker-cell') as HTMLElement | null
+              const iso = td?.getAttribute?.('title') ?? ''
+              if (!iso) return
 
-              return (
-                <div className="leedeli-cal-cellWrap">
-                  {renderRequestPills(d)}
-                </div>
-              )
+              if (!validDatesSet.has(iso)) {
+                // 근무기간 밖 클릭: 경고만 띄우고, 캘린더의 어떤 동작도 발생하지 않게 차단
+                e.preventDefault()
+                e.stopPropagation()
+                const now = Date.now()
+                if (now - lastRangeWarnAtRef.current > 1200) {
+                  lastRangeWarnAtRef.current = now
+                  message.warning(`선택한 날짜(${iso})는 근무기간(${rangeISO.startDateISO} ~ ${rangeISO.endDateISO}) 밖입니다.`)
+                }
+                return
+              }
+
+              // 중복 토글 방지: antd 내부 onSelect 처리로 내려가지 않게 차단하고, 여기서만 처리
+              e.preventDefault()
+              e.stopPropagation()
+
+              setSelectedDate(dayjs(iso))
+              if (selectedStaffId) toggleForSelected(iso)
             }}
-          />
+          >
+            <Calendar
+              fullscreen={false}
+              value={selectedDate}
+              onSelect={(d) => {
+                // 선택 날짜 표시만(토글은 위임 핸들러에서만)
+                setSelectedDate(d)
+              }}
+              cellRender={(d: Dayjs, info: CellRenderInfo<Dayjs>) => {
+                if (info.type !== 'date') return info.originNode
+                return <div className="leedeli-cal-cellWrap">{renderRequestPills(d)}</div>
+              }}
+            />
+          </div>
 
           <Card size="small" title={`선택 날짜: ${selectedDate.format('YYYY-MM-DD')}`}>
             <Flex align="center" justify="space-between" wrap gap={8}>
@@ -676,7 +730,7 @@ export function CreateSchedulePage() {
           </Typography.Title>
           <Calendar
             fullscreen={false}
-            value={dayjs(`${ymWatch.year()}-${String(ymWatch.month() + 1).padStart(2, '0')}-01`)}
+            value={selectedDate}
             cellRender={(d: Dayjs, info: CellRenderInfo<Dayjs>) => {
               if (info.type !== 'date') return info.originNode
 
@@ -684,13 +738,13 @@ export function CreateSchedulePage() {
               const assignment = result.assignments.find((a) => a.dateISO === iso)
               if (!assignment) return null
 
-              const inMonth = d.month() === ymWatch.month()
+              const inRange = validDatesSet.has(iso)
 
               const shiftColors: Record<Shift, string> = { open: '#52c41a', middle: '#1890ff', close: '#722ed1' }
               const shiftLabels: Record<Shift, string> = { open: '오', middle: '미', close: '마' }
 
               return (
-                <div className="leedeli-cal-cellContent" style={{ opacity: inMonth ? 1 : 0.35 }}>
+                <div className="leedeli-cal-cellContent" style={{ opacity: inRange ? 1 : 0.25 }}>
                   <div className="leedeli-cal-pills" style={{ fontSize: 9 }}>
                     {(['open', 'middle', 'close'] as Shift[]).map((shift) => {
                       const names = assignment.byShift[shift]

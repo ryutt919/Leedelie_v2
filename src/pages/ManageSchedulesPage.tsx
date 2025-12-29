@@ -25,7 +25,11 @@ export function ManageSchedulesPage() {
     return schedules
       .filter((s) => {
         if (!filterYm) return true
-        return s.year === filterYm.year() && s.month === filterYm.month() + 1
+        const monthStart = filterYm.startOf('month')
+        const monthEnd = filterYm.endOf('month')
+        const sStart = dayjs(s.startDateISO)
+        const sEnd = dayjs(s.endDateISO)
+        return !sEnd.isBefore(monthStart, 'day') && !sStart.isAfter(monthEnd, 'day')
       })
       .filter((s) => {
         if (!q) return true
@@ -42,8 +46,8 @@ export function ManageSchedulesPage() {
           icon={<DownloadOutlined />}
           onClick={() => {
             const rows = filtered.map((s) => ({
-              연: s.year,
-              월: s.month,
+              시작일: s.startDateISO,
+              종료일: s.endDateISO,
               인원수: s.staff.length,
               직원: s.staff.map((m) => m.name).join(', '),
               업데이트: dayjs(s.updatedAtISO).format('YYYY-MM-DD HH:mm'),
@@ -111,7 +115,7 @@ export function ManageSchedulesPage() {
               ]}
             >
               <List.Item.Meta
-                title={`${s.year}-${String(s.month).padStart(2, '0')} (${s.staff.length}명)`}
+                title={`${s.startDateISO} ~ ${s.endDateISO} (${s.staff.length}명)`}
                 description={
                   <Space direction="vertical" size={2}>
                     <Typography.Text type="secondary">
@@ -137,7 +141,7 @@ export function ManageSchedulesPage() {
 
       <Modal
         open={!!detail}
-        title={detail ? `${detail.year}-${String(detail.month).padStart(2, '0')} 스케줄` : '스케줄'}
+        title={detail ? `${detail.startDateISO} ~ ${detail.endDateISO} 스케줄` : '스케줄'}
         onCancel={() => setDetail(null)}
         footer={null}
         width={720}

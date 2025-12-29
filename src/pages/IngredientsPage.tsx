@@ -6,11 +6,11 @@ import type { CsvPreviewRow } from '../components/CsvPreviewModal'
 import type { Ingredient } from '../domain/types'
 import { MobileShell } from '../layouts/MobileShell'
 import { deleteIngredient, loadIngredients, saveIngredients, upsertIngredient } from '../storage/ingredientsRepo'
-import { readFileText, parseCsv } from '../utils/csv'
 import { downloadText } from '../utils/download'
 import { newId } from '../utils/id'
 import { round2, safeNumber } from '../utils/money'
 import { downloadXlsx } from '../utils/xlsxExport'
+import { parseXlsxFileToJsonRows } from '../utils/xlsxImport'
 
 export function IngredientsPage() {
   const [tick, setTick] = useState(0)
@@ -82,14 +82,16 @@ export function IngredientsPage() {
     )
   }
 
-  const buildCsvPreview = async (file: File) => {
-    const text = await readFileText(file)
-    const parsed = parseCsv(text)
+  const buildXlsxPreview = async (file: File) => {
+    const parsed = await parseXlsxFileToJsonRows(file, { preferredSheetName: 'Ingredients' })
     const byName = new Map(items.map((x) => [x.name.toLowerCase(), x]))
 
-    const rows: CsvPreviewRow<{ name: string; price: number; unit: number }>[] = parsed.rows.map((r, idx) => {
-      const [nameRaw, priceRaw, unitRaw] = r
-      const name = (nameRaw ?? '').trim()
+    const rows: CsvPreviewRow<{ name: string; price: number; unit: number }>[] = parsed.map((r, idx) => {
+      const nameRaw = String((r['이름'] ?? '') as unknown)
+      const priceRaw = r['가격']
+      const unitRaw = r['구매단위']
+
+      const name = nameRaw.trim()
       const price = safeNumber(priceRaw, NaN)
       const unit = safeNumber(unitRaw, NaN)
 
@@ -121,7 +123,7 @@ export function IngredientsPage() {
           <Space direction="vertical" size={0}>
             <Typography.Text>{name || '(이름 없음)'}</Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              가격 {priceRaw ?? '-'} / 단위 {unitRaw ?? '-'}
+              가격 {String(priceRaw ?? '-')} / 단위 {String(unitRaw ?? '-')}
             </Typography.Text>
           </Space>
         ),
@@ -211,21 +213,24 @@ export function IngredientsPage() {
           추가
         </Button>
         <Upload
-          accept=".csv,text/csv"
+          accept=".xls,.xlsx"
           showUploadList={false}
           beforeUpload={async (file) => {
-            await buildCsvPreview(file)
+            await buildXlsxPreview(file)
             return false
           }}
         >
-          <Button icon={<UploadOutlined />}>CSV 업로드</Button>
+          <Button icon={<UploadOutlined />}>엑셀 업로드</Button>
         </Upload>
       </Flex>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+        업로드 엑셀 형식: 시트명 <b>Ingredients</b>(없으면 첫 시트) / 헤더 <b>이름</b>, <b>가격</b>, <b>구매단위</b> (숫자)
+      </Typography.Text>
 
       <Card size="small">
         <List
           dataSource={items}
-          locale={{ emptyText: '재료가 없습니다. “추가” 또는 CSV 업로드를 사용하세요.' }}
+          locale={{ emptyText: '재료가 없습니다. “추가” 또는 엑셀 업로드를 사용하세요.' }}
           renderItem={(it) => (
             <List.Item
               actions={[
@@ -291,7 +296,7 @@ export function IngredientsPage() {
 
       <CsvPreviewModal
         open={csvOpen}
-        title="CSV 미리보기 (재료)"
+        title="엑셀 미리보기 (재료)"
         rows={csvRows}
         onClose={() => setCsvOpen(false)}
         onChangeRowAction={(key, action) =>

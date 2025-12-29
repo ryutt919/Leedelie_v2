@@ -16,7 +16,7 @@ createRoot(document.getElementById('root')!).render(
       }}
     >
       <HashRouter>
-        <App />
+    <App />
       </HashRouter>
     </ConfigProvider>
   </StrictMode>,

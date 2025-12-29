@@ -28,7 +28,8 @@ export function exportScheduleXlsx(s: SavedSchedule) {
   }))
 
   // xlsxExport는 단일 시트만 지원하므로, 가장 중요한 형태(이름 포함)를 우선 제공
-  downloadXlsx(`${s.year}-${String(s.month).padStart(2, '0')}_schedule.xlsx`, 'Schedule', rows2)
+  const name = `${s.startDateISO}~${s.endDateISO}_schedule.xlsx`
+  downloadXlsx(name, 'Schedule', rows2)
   // 필요하면 추후 다중 시트로 확장
   void SHIFT_LABEL
   void rows

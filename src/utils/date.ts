@@ -14,6 +14,19 @@ export function daysInMonthISO(year: number, month: number) {
   return out
 }
 
+export function daysInRangeISO(startDateISO: string, endDateISO: string) {
+  const start = dayjs(startDateISO, 'YYYY-MM-DD', true)
+  const end = dayjs(endDateISO, 'YYYY-MM-DD', true)
+  if (!start.isValid() || !end.isValid()) return []
+  if (end.isBefore(start, 'day')) return []
+  const days = end.diff(start, 'day')
+  const out: string[] = []
+  for (let i = 0; i <= days; i++) {
+    out.push(start.add(i, 'day').format('YYYY-MM-DD'))
+  }
+  return out
+}
+
 export function isISODate(s: string) {
   return dayjs(s, 'YYYY-MM-DD', true).isValid()
 }

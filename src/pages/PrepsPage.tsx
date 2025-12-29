@@ -31,11 +31,11 @@ import type { Ingredient, Prep, PrepIngredientItem } from '../domain/types'
 import { MobileShell } from '../layouts/MobileShell'
 import { loadIngredients, saveIngredients } from '../storage/ingredientsRepo'
 import { clearPreps, deletePrep, loadPreps, savePreps, upsertPrep } from '../storage/prepsRepo'
-import { parseCsv, readFileText } from '../utils/csv'
 import { downloadText } from '../utils/download'
 import { newId } from '../utils/id'
 import { round2, safeNumber } from '../utils/money'
 import { downloadXlsx } from '../utils/xlsxExport'
+import { parseXlsxFileToJsonRows } from '../utils/xlsxImport'
 
 export function PrepsPage() {
   const [tick, setTick] = useState(0)
@@ -187,22 +187,32 @@ export function PrepsPage() {
     return { ingredient: created, created }
   }
 
-  const buildCsvPreview = async (file: File) => {
-    const text = await readFileText(file)
-    const parsed = parseCsv(text)
+  const buildXlsxPreview = async (file: File) => {
+    const parsed = await parseXlsxFileToJsonRows(file, { preferredSheetName: 'Preps' })
 
-    // CSV 포맷: 이름,재료명,투입량,보충날짜1,보충날짜2...
+    // XLSX(내보내기) 포맷 기준:
+    // 프렙명, 재료명, 투입량, 보충이력(콤마 구분)
     // 같은 프렙명 병합(재료 누적)
-    const prepMap = new Map<string, { name: string; items: PrepIngredientItem[]; dates: string[]; createdIngredients: Ingredient[]; errors: string[] }>()
+    const prepMap = new Map<
+      string,
+      { name: string; items: PrepIngredientItem[]; dates: string[]; createdIngredients: Ingredient[]; errors: string[] }
+    >()
     const createdIngredients: Ingredient[] = []
 
-    for (let i = 0; i < parsed.rows.length; i++) {
-      const row = parsed.rows[i]
-      const [prepNameRaw, ingNameRaw, amountRaw, ...datesRaw] = row
-      const prepName = (prepNameRaw ?? '').trim()
-      const ingName = (ingNameRaw ?? '').trim()
+    for (let i = 0; i < parsed.length; i++) {
+      const row = parsed[i]
+      const prepNameRaw = String((row['프렙명'] ?? '') as unknown)
+      const ingNameRaw = String((row['재료명'] ?? '') as unknown)
+      const amountRaw = row['투입량']
+      const historyRaw = String((row['보충이력'] ?? '') as unknown)
+
+      const prepName = prepNameRaw.trim()
+      const ingName = ingNameRaw.trim()
       const amount = safeNumber(amountRaw, NaN)
-      const dates = datesRaw.map((d) => (d ?? '').trim()).filter(Boolean)
+      const dates = historyRaw
+        .split(',')
+        .map((d) => d.trim())
+        .filter(Boolean)
 
       const errors: string[] = []
       if (!prepName) errors.push(`(${i + 1}행) 프렙명이 비었습니다.`)
@@ -277,7 +287,7 @@ export function PrepsPage() {
     setCsvRows(rows)
     setCsvOpen(true)
     if (createdIngredients.length) {
-      message.info(`CSV에 없는 재료 ${createdIngredients.length}개는 가격 0으로 생성 예정입니다.`)
+      message.info(`엑셀에 없는 재료 ${createdIngredients.length}개는 가격 0으로 생성 예정입니다.`)
     }
   }
 
@@ -346,14 +356,14 @@ export function PrepsPage() {
           추가
         </Button>
         <Upload
-          accept=".csv,text/csv"
+          accept=".xls,.xlsx"
           showUploadList={false}
           beforeUpload={async (file) => {
-            await buildCsvPreview(file)
+            await buildXlsxPreview(file)
             return false
           }}
         >
-          <Button icon={<UploadOutlined />}>CSV 업로드</Button>
+          <Button icon={<UploadOutlined />}>엑셀 업로드</Button>
         </Upload>
         <Popconfirm
           title="프렙 전체를 초기화할까요?"
@@ -369,11 +379,15 @@ export function PrepsPage() {
           </Button>
         </Popconfirm>
       </Flex>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+        업로드 엑셀 형식: 시트명 <b>Preps</b>(없으면 첫 시트) / 헤더 <b>프렙명</b>, <b>재료명</b>, <b>투입량</b>, <b>보충이력</b>(예:
+        2025-12-01, 2025-12-15)
+      </Typography.Text>
 
       <Card size="small">
         <List
           dataSource={preps}
-          locale={{ emptyText: '프렙이 없습니다. “추가” 또는 CSV 업로드를 사용하세요.' }}
+          locale={{ emptyText: '프렙이 없습니다. “추가” 또는 엑셀 업로드를 사용하세요.' }}
           renderItem={(p) => {
             const cost = calcPrepCost(p)
             const avg = avgIntervalDays(p.restockDatesISO)
@@ -511,7 +525,7 @@ export function PrepsPage() {
 
       <CsvPreviewModal
         open={csvOpen}
-        title="CSV 미리보기 (프렙)"
+        title="엑셀 미리보기 (프렙)"
         rows={csvRows}
         onClose={() => setCsvOpen(false)}
         onChangeRowAction={(key, action) =>

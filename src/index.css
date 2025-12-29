@@ -40,34 +40,119 @@ a {
   margin: 0 auto;
 }
 
+/* CreateSchedule: 휴무/하프 모드 버튼 컬러 */
+.leedeli-mode-btn {
+  font-weight: 600;
+}
+.leedeli-mode-btn.leedeli-mode-btn--off {
+  border-color: #91caff;
+  color: #0958d9;
+}
+.leedeli-mode-btn.leedeli-mode-btn--half {
+  border-color: #ffd591;
+  color: #ad4e00;
+}
+.leedeli-mode-btn.leedeli-mode-btn--off.is-active {
+  background: #bae0ff;
+  border-color: #91caff;
+  color: #003a8c;
+}
+.leedeli-mode-btn.leedeli-mode-btn--half.is-active {
+  background: #ffe7ba;
+  border-color: #ffd591;
+  color: #873800;
+}
+
 /* Calendar cell: request pills (CreateSchedule) */
+
+/* 배경 레이어가 td 전체를 덮도록 */
+.leedeli-cal-bg-layer {
+  position: absolute;
+  inset: 1px;
+  border-radius: 6px;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .leedeli-cal-cellContent {
-  margin-top: 4px;
+  position: relative;
+  z-index: 1;
+  margin-top: 0;
+  width: 100%;
 }
 
 .leedeli-cal-cellWrap {
-  height: 100%;
+  position: static;
+  width: 100%;
+  cursor: pointer;
 }
 
 .leedeli-cal-pills {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  overflow: hidden;
-  max-height: 52px; /* 2줄 + +N 정도만 보이도록 */
+  gap: 2px;
+}
+
+/* 캘린더 셀이 내용에 맞게 높이 자동 조절 */
+.ant-picker-calendar-mini .ant-picker-content td {
+  height: auto !important;
+  min-height: 40px;
+  vertical-align: top;
+}
+
+/* 날짜(좌측) + pill(우측) 2열 레이아웃 */
+.ant-picker-calendar-mini .ant-picker-calendar-date {
+  height: auto !important;
+  min-height: 40px;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  padding: 4px !important;
+  gap: 4px !important;
+  position: relative !important; /* bg-layer의 기준을 셀 전체로 */
 }
 
 .leedeli-cal-pills .ant-tag {
   line-height: 16px;
   font-size: 10px;
+  max-width: 100%;
 }
 
-/* Calendar pills should be visible in the content area */
-.ant-picker-calendar-date-content {
+/* td를 기준으로 absolute 포지셔닝 가능하게 */
+.ant-picker-calendar-mini td.ant-picker-cell {
+  position: relative !important;
+}
+
+/* date-content는 오른쪽 영역(내용 높이 기반)으로 동작 */
+.ant-picker-calendar-mini .ant-picker-calendar-date-content {
+  position: static !important;
+  inset: auto !important;
   overflow: visible !important;
+  display: block !important;
+  padding: 0 !important;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-/* 캘린더 날짜 숫자 폰트 크기 */
+/* 날짜 숫자는 좌측 상단에 고정 */
 .ant-picker-calendar-mini .ant-picker-calendar-date-value {
   font-size: 10px;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+/* 호버/선택 시 나타나는 기본 스타일 제거 */
+.ant-picker-calendar-mini .ant-picker-cell-inner::before,
+.ant-picker-calendar-mini .ant-picker-cell-selected .ant-picker-cell-inner::before {
+  display: none !important;
+}
+
+/* 선택된 날짜의 기본 배경색 제거 */
+.ant-picker-calendar-mini .ant-picker-cell-selected .ant-picker-cell-inner {
+  background: transparent !important;
 }

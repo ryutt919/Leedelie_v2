@@ -3,7 +3,7 @@ import { readJson, writeJson } from './jsonStore'
 import { LS_KEYS } from './keys'
 
 export const DEFAULT_WORK_RULES: WorkRules = {
-  DAILY_STAFF_BASE: 2,
+  DAILY_STAFF_BASE: 2.5,
   DAILY_STAFF_MAX: 3,
   WORK_HOURS: 8,
   BREAK_HOURS: 1,

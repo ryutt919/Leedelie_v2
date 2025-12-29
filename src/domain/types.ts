@@ -53,7 +53,18 @@ export type ScheduleStats = {
 
 export type SavedSchedule = {
   id: Id
+  /**
+   * 스케줄 기간(포함 범위)
+   * - YYYY-MM-DD
+   */
+  startDateISO: string
+  endDateISO: string
+  /**
+   * @deprecated (하위 호환/표시용) startDateISO 기준의 연/월
+   * - 기간 스케줄(월/년도 넘어감)에서도 startDateISO의 연/월이 들어갑니다.
+   */
   year: number
+  /** @deprecated (하위 호환/표시용) startDateISO 기준의 월(1-12) */
   month: number // 1-12
   createdAtISO: string
   updatedAtISO: string
