@@ -19,6 +19,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Tag,
   Typography,
   Upload,
   message,
@@ -54,6 +55,7 @@ export function PrepsPage() {
   const [openEdit, setOpenEdit] = useState(false)
   const [editing, setEditing] = useState<Prep | null>(null)
   const [form] = Form.useForm()
+  const [restockPicker, setRestockPicker] = useState<dayjs.Dayjs | null>(null)
 
   const [csvOpen, setCsvOpen] = useState(false)
   const [csvRows, setCsvRows] = useState<CsvPreviewRow<{ prep: Prep; createdIngredients: Ingredient[] }>[]>([])
@@ -525,30 +527,53 @@ export function PrepsPage() {
 
           <Form.Item label="보충 이력">
             <Space wrap>
-              <Button
-                onClick={() => {
-                  const cur = (form.getFieldValue('restockDatesISO') ?? []) as string[]
-                  const today = dayjs().format('YYYY-MM-DD')
-                  form.setFieldValue('restockDatesISO', [...new Set([today, ...cur])].sort())
-                }}
-              >
-                오늘 추가
-              </Button>
               <DatePicker
+                value={restockPicker}
                 onChange={(d) => {
                   if (!d) return
                   const cur = (form.getFieldValue('restockDatesISO') ?? []) as string[]
                   const iso = d.format('YYYY-MM-DD')
                   form.setFieldValue('restockDatesISO', [...new Set([iso, ...cur])].sort())
+                  setRestockPicker(null) // 선택 즉시 목록 반영 + 입력 초기화
                 }}
               />
             </Space>
             <Form.Item name="restockDatesISO" noStyle>
               <Input type="hidden" />
             </Form.Item>
-            <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-              저장 시 보충 이력은 유지됩니다.
-            </Typography.Paragraph>
+            <Form.Item shouldUpdate noStyle>
+              {() => {
+                const dates = ((form.getFieldValue('restockDatesISO') ?? []) as string[])
+                  .filter((x) => dayjs(x, 'YYYY-MM-DD', true).isValid())
+                  .sort()
+                if (!dates.length) {
+                  return (
+                    <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+                      보충 이력이 없습니다.
+                    </Typography.Text>
+                  )
+                }
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <Space wrap size={4}>
+                      {dates.map((d) => (
+                        <Tag
+                          key={d}
+                          closable
+                          onClose={(e) => {
+                            e.preventDefault()
+                            const next = dates.filter((x) => x !== d)
+                            form.setFieldValue('restockDatesISO', next)
+                          }}
+                        >
+                          {d}
+                        </Tag>
+                      ))}
+                    </Space>
+                  </div>
+                )
+              }}
+            </Form.Item>
           </Form.Item>
         </Form>
       </Modal>
