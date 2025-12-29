@@ -156,3 +156,10 @@ a {
 .ant-picker-calendar-mini .ant-picker-cell-selected .ant-picker-cell-inner {
   background: transparent !important;
 }
+
+/* 선택된 날짜의 텍스트(날짜 숫자)가 흰색으로 바뀌는 기본 스타일 제거 */
+.ant-picker-calendar-mini td.ant-picker-cell-selected,
+.ant-picker-calendar-mini td.ant-picker-cell-selected .ant-picker-calendar-date-value,
+.ant-picker-calendar-mini td.ant-picker-cell-selected .ant-picker-calendar-date-value a {
+  color: inherit !important;
+}
