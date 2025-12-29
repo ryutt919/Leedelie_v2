@@ -30,13 +30,18 @@ export function IngredientsPage() {
 
   const openCreate = () => {
     setEditing(null)
-    form.setFieldsValue({ name: '', purchasePrice: 0, purchaseUnit: 1 })
+    form.setFieldsValue({ name: '', purchasePrice: 0, purchaseUnit: 1, unitType: 'g' })
     setOpenEdit(true)
   }
 
   const openUpdate = (it: Ingredient) => {
     setEditing(it)
-    form.setFieldsValue({ name: it.name, purchasePrice: it.purchasePrice, purchaseUnit: it.purchaseUnit })
+    form.setFieldsValue({
+      name: it.name,
+      purchasePrice: it.purchasePrice,
+      purchaseUnit: it.purchaseUnit,
+      unitType: it.unitType ?? 'g',
+    })
     setOpenEdit(true)
   }
 
@@ -45,6 +50,7 @@ export function IngredientsPage() {
     const name = String(v.name ?? '').trim()
     const purchasePrice = safeNumber(v.purchasePrice, 0)
     const purchaseUnit = safeNumber(v.purchaseUnit, 1)
+    const unitType: Ingredient['unitType'] = v.unitType === 'ea' ? 'ea' : 'g'
     if (!name) return
     if (purchaseUnit <= 0) {
       message.error('구매단위는 0보다 커야 합니다.')
@@ -54,8 +60,8 @@ export function IngredientsPage() {
     const unitPrice = round2(purchasePrice / purchaseUnit)
 
     const next: Ingredient = editing
-      ? { ...editing, name, purchasePrice, purchaseUnit, unitPrice, updatedAtISO: now }
-      : { id: newId(), name, purchasePrice, purchaseUnit, unitPrice, updatedAtISO: now }
+      ? { ...editing, name, purchasePrice, purchaseUnit, unitPrice, unitType, updatedAtISO: now }
+      : { id: newId(), name, purchasePrice, purchaseUnit, unitPrice, unitType, updatedAtISO: now }
 
     upsertIngredient(next)
     setOpenEdit(false)
@@ -78,22 +84,31 @@ export function IngredientsPage() {
         가격: x.purchasePrice,
         구매단위: x.purchaseUnit,
         단위가격: x.unitPrice,
+        단위: x.unitType === 'ea' ? '개' : 'g',
       })),
     )
+  }
+
+  const parseUnitType = (raw: unknown): Ingredient['unitType'] => {
+    const s = String(raw ?? '').trim().toLowerCase()
+    if (s === 'ea' || s === '개' || s === '1' || s === 'unit') return 'ea'
+    return 'g'
   }
 
   const buildXlsxPreview = async (file: File) => {
     const parsed = await parseXlsxFileToJsonRows(file, { preferredSheetName: 'Ingredients' })
     const byName = new Map(items.map((x) => [x.name.toLowerCase(), x]))
 
-    const rows: CsvPreviewRow<{ name: string; price: number; unit: number }>[] = parsed.map((r, idx) => {
+    const rows: CsvPreviewRow<{ name: string; price: number; unit: number; unitType: Ingredient['unitType'] }>[] = parsed.map((r, idx) => {
       const nameRaw = String((r['이름'] ?? '') as unknown)
       const priceRaw = r['가격']
       const unitRaw = r['구매단위']
+      const unitTypeRaw = (r['단위'] ?? '') as unknown
 
       const name = nameRaw.trim()
       const price = safeNumber(priceRaw, NaN)
       const unit = safeNumber(unitRaw, NaN)
+      const unitType = parseUnitType(unitTypeRaw)
 
       const errors: string[] = []
       if (!name) errors.push('이름이 비었습니다.')
@@ -118,12 +133,12 @@ export function IngredientsPage() {
       return {
         key: `row_${idx + 1}_${name || 'unknown'}`,
         rowNo: idx + 1,
-        parsed: { name, price, unit },
+        parsed: { name, price, unit, unitType },
         parsedLabel: (
           <Space direction="vertical" size={0}>
             <Typography.Text>{name || '(이름 없음)'}</Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              가격 {String(priceRaw ?? '-')} / 단위 {String(unitRaw ?? '-')}
+              가격 {String(priceRaw ?? '-')} / 구매단위 {String(unitRaw ?? '-')} / 단위 {unitType === 'ea' ? '개' : 'g'}
             </Typography.Text>
           </Space>
         ),
@@ -131,7 +146,7 @@ export function IngredientsPage() {
           <Space direction="vertical" size={0}>
             <Typography.Text>{existing.name}</Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              가격 {existing.purchasePrice} / 단위 {existing.purchaseUnit}
+              가격 {existing.purchasePrice} / 구매단위 {existing.purchaseUnit} / 단위 {existing.unitType === 'ea' ? '개' : 'g'}
             </Typography.Text>
           </Space>
         ) : undefined,
@@ -161,6 +176,7 @@ export function IngredientsPage() {
       const existing = byName.get(nameKey)
       const now = new Date().toISOString()
       const unitPrice = round2(r.parsed.price / r.parsed.unit)
+      const unitType: Ingredient['unitType'] = (r.parsed as any).unitType === 'ea' ? 'ea' : 'g'
 
       if (existing) {
         const upd: Ingredient = {
@@ -169,6 +185,7 @@ export function IngredientsPage() {
           purchasePrice: r.parsed.price,
           purchaseUnit: r.parsed.unit,
           unitPrice,
+          unitType,
           updatedAtISO: now,
         }
         const idx = next.findIndex((x) => x.id === existing.id)
@@ -182,6 +199,7 @@ export function IngredientsPage() {
           purchasePrice: r.parsed.price,
           purchaseUnit: r.parsed.unit,
           unitPrice,
+          unitType,
           updatedAtISO: now,
         }
         next.push(createdItem)
@@ -224,7 +242,7 @@ export function IngredientsPage() {
         </Upload>
       </Flex>
       <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
-        업로드 엑셀 형식: 시트명 <b>Ingredients</b>(없으면 첫 시트) / 헤더 <b>이름</b>, <b>가격</b>, <b>구매단위</b> (숫자)
+        업로드 엑셀 형식: 시트명 <b>Ingredients</b>(없으면 첫 시트) / 헤더 <b>이름</b>, <b>가격</b>, <b>구매단위</b>(숫자), <b>단위</b>(g/개, 선택)
       </Typography.Text>
 
       <Card size="small">
@@ -257,7 +275,7 @@ export function IngredientsPage() {
                 title={it.name}
                 description={
                   <Typography.Text type="secondary">
-                    구매 {it.purchasePrice} / 단위 {it.purchaseUnit} → 단가 {it.unitPrice}
+                    구매 {it.purchasePrice} / 구매단위 {it.purchaseUnit} {it.unitType === 'ea' ? '개' : 'g'} → 단가 {it.unitPrice}
                   </Typography.Text>
                 }
               />
@@ -290,6 +308,24 @@ export function IngredientsPage() {
             rules={[{ required: true, message: '구매단위를 입력하세요' }]}
           >
             <InputNumber min={0.0001} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="unitType" label="단위" initialValue="g">
+            <Space.Compact style={{ width: '100%' }}>
+              <Button
+                type={(form.getFieldValue('unitType') ?? 'g') === 'g' ? 'primary' : 'default'}
+                onClick={() => form.setFieldValue('unitType', 'g')}
+                style={{ width: '50%' }}
+              >
+                g
+              </Button>
+              <Button
+                type={(form.getFieldValue('unitType') ?? 'g') === 'ea' ? 'primary' : 'default'}
+                onClick={() => form.setFieldValue('unitType', 'ea')}
+                style={{ width: '50%' }}
+              >
+                개
+              </Button>
+            </Space.Compact>
           </Form.Item>
         </Form>
       </Modal>

@@ -82,6 +82,12 @@ export type Ingredient = {
   purchasePrice: number
   purchaseUnit: number
   unitPrice: number
+  /**
+   * 재료 단위
+   * - 'g' = 그램(기본)
+   * - 'ea' = 개
+   */
+  unitType?: 'g' | 'ea'
   updatedAtISO: string
 }
 

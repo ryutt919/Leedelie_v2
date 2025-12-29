@@ -61,6 +61,10 @@ export function PrepsPage() {
   const refresh = () => setTick((x) => x + 1)
 
   const ingredientById = useMemo(() => new Map(ingredients.map((x) => [x.id, x])), [ingredients])
+  const unitLabelOf = (ingredientId: string) => {
+    const u = ingredientById.get(ingredientId)?.unitType ?? 'g'
+    return u === 'ea' ? '개' : 'g'
+  }
 
   const calcPrepCost = (p: Prep) => {
     let sum = 0
@@ -108,6 +112,16 @@ export function PrepsPage() {
       restockDatesISO: p.restockDatesISO,
     })
     setOpenEdit(true)
+  }
+
+  const addTodayRestockFor = (p: Prep) => {
+    const today = dayjs().format('YYYY-MM-DD')
+    const nextDates = [...new Set([...(p.restockDatesISO ?? []), today])].sort()
+    const now = new Date().toISOString()
+    const next: Prep = { ...p, restockDatesISO: nextDates, updatedAtISO: now }
+    upsertPrep(next)
+    refresh()
+    message.success(`${p.name}: 오늘(${today}) 보충 이력을 추가했습니다.`)
   }
 
   const onSave = async () => {
@@ -395,6 +409,9 @@ export function PrepsPage() {
             return (
               <List.Item
                 actions={[
+                  <Button key="today" type="link" onClick={() => addTodayRestockFor(p)}>
+                    오늘 추가
+                  </Button>,
                   <Button key="edit" type="link" icon={<EditOutlined />} onClick={() => openUpdate(p)}>
                     수정
                   </Button>,
@@ -470,14 +487,27 @@ export function PrepsPage() {
                           }}
                         />
                       </Form.Item>
-                      <Form.Item
-                        {...f}
-                        name={[f.name, 'amount']}
-                        label="투입량"
-                        rules={[{ required: true, message: '투입량' }]}
-                        style={{ width: 140, marginBottom: 0 }}
-                      >
-                        <InputNumber min={0} style={{ width: '100%' }} />
+                      <Form.Item label="투입량" style={{ width: 180, marginBottom: 0 }}>
+                        <Space.Compact style={{ width: '100%' }}>
+                          <Form.Item {...f} name={[f.name, 'amount']} rules={[{ required: true, message: '투입량' }]} noStyle>
+                            <InputNumber min={0} style={{ width: 120 }} />
+                          </Form.Item>
+                          <Form.Item
+                            shouldUpdate={(prev, cur) =>
+                              (prev.items?.[f.name]?.ingredientId ?? '') !== (cur.items?.[f.name]?.ingredientId ?? '')
+                            }
+                            noStyle
+                          >
+                            {() => {
+                              const id = String(form.getFieldValue(['items', f.name, 'ingredientId']) ?? '')
+                              return (
+                                <Button disabled style={{ width: 60 }}>
+                                  {id ? unitLabelOf(id) : '-'}
+                                </Button>
+                              )
+                            }}
+                          </Form.Item>
+                        </Space.Compact>
                       </Form.Item>
                       <Button danger type="text" onClick={() => remove(f.name)} aria-label="삭제">
                         삭제
