@@ -60,7 +60,6 @@ export function PrepsPage() {
 
   const [csvOpen, setCsvOpen] = useState(false)
   const [csvRows, setCsvRows] = useState<CsvPreviewRow<{ prep: Prep; changedIngredients: Ingredient[] }>[]>([])
-  const [lastUploadIngredientNames, setLastUploadIngredientNames] = useState<string[]>([])
 
   const refresh = () => setTick((x) => x + 1)
 
@@ -236,16 +235,6 @@ export function PrepsPage() {
       return
     }
     const dataRows = aoa.slice(1) // 1행(헤더) 무시
-    // 업로드된 엑셀에서 등장하는 재료명 목록(표시용)
-    const ingNames = Array.from(
-      new Set(
-        dataRows
-          .map((r) => (Array.isArray(r) ? String((r as unknown[])[1] ?? '') : ''))
-          .map((s) => s.trim())
-          .filter(Boolean),
-      ),
-    ).sort((a, b) => a.localeCompare(b))
-    setLastUploadIngredientNames(ingNames)
 
     // XLSX(내보내기) 포맷 기준:
     // 프렙명, 재료명, 투입량, 보충이력(콤마 구분)
@@ -317,6 +306,15 @@ export function PrepsPage() {
       const kind: CsvPreviewRow<{ prep: Prep; createdIngredients: Ingredient[] }>['kind'] =
         b.errors.length ? 'invalid' : existing ? 'update' : 'create'
 
+      const ingNames = [...new Set(b.items.map((x) => x.ingredientName).map((s) => String(s ?? '').trim()).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b),
+      )
+      const MAX_ING_PREVIEW = 10
+      const ingPreview =
+        ingNames.length <= MAX_ING_PREVIEW
+          ? ingNames.join(', ')
+          : `${ingNames.slice(0, MAX_ING_PREVIEW).join(', ')} 외 ${ingNames.length - MAX_ING_PREVIEW}개`
+
       return {
         key: `prep_${idx}_${b.name}`,
         rowNo: idx + 1,
@@ -326,6 +324,9 @@ export function PrepsPage() {
             <Typography.Text>{b.name}</Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               재료 {b.items.length}개 / 보충 {uniqDates.length}회
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: ingNames.join(', ') }}>
+              재료: {ingPreview || '-'}
             </Typography.Text>
           </Space>
         ),
@@ -457,15 +458,6 @@ export function PrepsPage() {
         업로드 엑셀 형식: 시트명 <b>Preps</b>(없으면 첫 시트) / 헤더 <b>프렙명</b>, <b>재료명</b>, <b>투입량</b>, <b>보충이력</b>(예:
         2025-12-01, 2025-12-15)
       </Typography.Text>
-      {lastUploadIngredientNames.length > 0 && (
-        <Typography.Paragraph
-          type="secondary"
-          style={{ marginTop: -8, marginBottom: 12, fontSize: 12 }}
-          ellipsis={{ rows: 2, expandable: true, symbol: '더보기' }}
-        >
-          업로드 감지 재료({lastUploadIngredientNames.length}개): {lastUploadIngredientNames.join(', ')}
-        </Typography.Paragraph>
-      )}
 
       <Card size="small">
         <List
