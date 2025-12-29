@@ -39,4 +39,8 @@ export function deleteIngredient(id: string) {
   saveIngredients(loadIngredients().filter((x) => x.id !== id))
 }
 
+export function clearIngredients() {
+  saveIngredients([])
+}
+
 

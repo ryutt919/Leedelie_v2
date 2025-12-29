@@ -1,11 +1,11 @@
-import { DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { Button, Card, Flex, Form, Input, InputNumber, List, Modal, Popconfirm, Select, Space, Typography, Upload, message } from 'antd'
 import { useMemo, useState } from 'react'
 import { CsvPreviewModal } from '../components/CsvPreviewModal'
 import type { CsvPreviewRow } from '../components/CsvPreviewModal'
 import type { Ingredient } from '../domain/types'
 import { MobileShell } from '../layouts/MobileShell'
-import { deleteIngredient, loadIngredients, saveIngredients, upsertIngredient } from '../storage/ingredientsRepo'
+import { clearIngredients, deleteIngredient, loadIngredients, saveIngredients, upsertIngredient } from '../storage/ingredientsRepo'
 import { downloadText } from '../utils/download'
 import { newId } from '../utils/id'
 import { round2, safeNumber } from '../utils/money'
@@ -244,6 +244,19 @@ export function IngredientsPage() {
         >
           <Button icon={<UploadOutlined />}>엑셀 업로드</Button>
         </Upload>
+        <Popconfirm
+          title="재료 전체를 초기화할까요?"
+          okText="초기화"
+          cancelText="취소"
+          onConfirm={() => {
+            clearIngredients()
+            refresh()
+          }}
+        >
+          <Button danger icon={<ReloadOutlined />}>
+            전체 초기화
+          </Button>
+        </Popconfirm>
       </Flex>
       <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
         업로드 엑셀 형식: 시트명 <b>Ingredients</b>(없으면 첫 시트) / 헤더 <b>이름</b>, <b>가격</b>, <b>구매단위</b>(예: 1000g / 10 개 / 1.5L), <b>단위</b>(선택)
