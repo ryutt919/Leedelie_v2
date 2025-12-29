@@ -68,6 +68,17 @@ export function PrepsPage() {
     return u === 'ea' ? '개' : 'g'
   }
 
+  const calcCostFromFormItems = (items: PrepIngredientItem[]) => {
+    let sum = 0
+    for (const it of items) {
+      if (!it?.ingredientId || !Number.isFinite(it.amount) || it.amount <= 0) continue
+      const ing = ingredientById.get(it.ingredientId)
+      const unitPrice = ing?.unitPrice ?? 0
+      sum += unitPrice * it.amount
+    }
+    return round2(sum)
+  }
+
   const calcPrepCost = (p: Prep) => {
     let sum = 0
     for (const it of p.items) {
@@ -405,7 +416,6 @@ export function PrepsPage() {
           dataSource={preps}
           locale={{ emptyText: '프렙이 없습니다. “추가” 또는 엑셀 업로드를 사용하세요.' }}
           renderItem={(p) => {
-            const cost = calcPrepCost(p)
             const avg = avgIntervalDays(p.restockDatesISO)
             const next = nextRestockISO(p.restockDatesISO)
             return (
@@ -438,9 +448,6 @@ export function PrepsPage() {
                   description={
                     <Space direction="vertical" size={2}>
                       <Typography.Text type="secondary">
-                        재료 {p.items.length}개 · 총비용 {cost}
-                      </Typography.Text>
-                      <Typography.Text type="secondary">
                         평균 보충 {avg ? `${avg}일` : '-'} · 다음 예상 {next ?? '-'}
                       </Typography.Text>
                     </Space>
@@ -461,6 +468,18 @@ export function PrepsPage() {
         width={720}
       >
         <Form form={form} layout="vertical" initialValues={{ items: [], restockDatesISO: [] }}>
+          <Form.Item shouldUpdate noStyle>
+            {() => {
+              const items = (form.getFieldValue('items') ?? []) as PrepIngredientItem[]
+              const normalized = items.filter((x) => x?.ingredientId)
+              const cost = calcCostFromFormItems(items)
+              return (
+                <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                  재료 {normalized.length}개 · 총비용 {cost}
+                </Typography.Text>
+              )
+            }}
+          </Form.Item>
           <Form.Item name="name" label="이름" rules={[{ required: true, message: '이름을 입력하세요' }]}>
             <Input placeholder="예) 토마토 소스" />
           </Form.Item>
