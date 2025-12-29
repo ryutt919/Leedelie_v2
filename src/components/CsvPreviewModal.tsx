@@ -99,7 +99,8 @@ export function CsvPreviewModal<TParsed>({
         dataSource={rows}
         rowKey="key"
         pagination={{ pageSize: 8, hideOnSinglePage: true }}
-        scroll={{ x: true }}
+        tableLayout="fixed"
+        scroll={{ x: 980 }}
         columns={[
           {
             title: '#',
@@ -109,11 +110,27 @@ export function CsvPreviewModal<TParsed>({
           {
             title: 'CSV',
             dataIndex: 'parsedLabel',
+            width: 240,
+            onCell: () => ({
+              style: {
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+              },
+            }),
           },
           {
             title: '기존',
             dataIndex: 'existingLabel',
+            width: 220,
             render: (v) => v ?? <Typography.Text type="secondary">없음</Typography.Text>,
+            onCell: () => ({
+              style: {
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+              },
+            }),
           },
           {
             title: '상태',
@@ -129,6 +146,7 @@ export function CsvPreviewModal<TParsed>({
           {
             title: '오류',
             dataIndex: 'errors',
+            width: 220,
             render: (errs: string[]) =>
               errs?.length ? (
                 <Space direction="vertical" size={2}>
