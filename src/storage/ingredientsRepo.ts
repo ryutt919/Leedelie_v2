@@ -8,10 +8,19 @@ type Store = {
 
 const EMPTY: Store = { items: [] }
 
+function normalizeIngredient(it: Ingredient): Ingredient {
+  const unitLabel =
+    (it.unitLabel && String(it.unitLabel).trim()) ||
+    (it.unitType === 'ea' ? '개' : it.unitType === 'g' ? 'g' : '') ||
+    'g'
+  return { ...it, unitLabel }
+}
+
 export function loadIngredients(): Ingredient[] {
   const r = readJson<Store>(LS_KEYS.ingredients)
   if (!r.ok) return EMPTY.items
-  return Array.isArray(r.value.items) ? r.value.items : EMPTY.items
+  const items = Array.isArray(r.value.items) ? r.value.items : EMPTY.items
+  return items.map(normalizeIngredient)
 }
 
 export function saveIngredients(items: Ingredient[]) {

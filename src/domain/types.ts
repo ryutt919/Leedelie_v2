@@ -83,10 +83,12 @@ export type Ingredient = {
   purchaseUnit: number
   unitPrice: number
   /**
-   * 재료 단위
-   * - 'g' = 그램(기본)
-   * - 'ea' = 개
+   * 재료 단위 라벨(문자열)
+   * - 예: g, 개, 장, ml ...
+   * - 미입력 시 기본은 'g'로 간주(UI/표시에서 처리)
    */
+  unitLabel?: string
+  /** @deprecated (구버전) */
   unitType?: 'g' | 'ea'
   updatedAtISO: string
 }

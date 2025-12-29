@@ -35,6 +35,7 @@ import { clearPreps, deletePrep, loadPreps, savePreps, upsertPrep } from '../sto
 import { downloadText } from '../utils/download'
 import { newId } from '../utils/id'
 import { round2, safeNumber } from '../utils/money'
+import { normalizeUnitLabel, parseAmountAndUnit } from '../utils/unit'
 import { downloadXlsx } from '../utils/xlsxExport'
 import { parseXlsxFileToJsonRows } from '../utils/xlsxImport'
 
@@ -58,14 +59,14 @@ export function PrepsPage() {
   const [restockPicker, setRestockPicker] = useState<dayjs.Dayjs | null>(null)
 
   const [csvOpen, setCsvOpen] = useState(false)
-  const [csvRows, setCsvRows] = useState<CsvPreviewRow<{ prep: Prep; createdIngredients: Ingredient[] }>[]>([])
+  const [csvRows, setCsvRows] = useState<CsvPreviewRow<{ prep: Prep; changedIngredients: Ingredient[] }>[]>([])
 
   const refresh = () => setTick((x) => x + 1)
 
   const ingredientById = useMemo(() => new Map(ingredients.map((x) => [x.id, x])), [ingredients])
   const unitLabelOf = (ingredientId: string) => {
-    const u = ingredientById.get(ingredientId)?.unitType ?? 'g'
-    return u === 'ea' ? '개' : 'g'
+    const ing = ingredientById.get(ingredientId)
+    return ing?.unitLabel ?? (ing?.unitType === 'ea' ? '개' : 'g')
   }
 
   const calcCostFromFormItems = (items: PrepIngredientItem[]) => {
@@ -184,10 +185,11 @@ export function PrepsPage() {
       const avg = avgIntervalDays(p.restockDatesISO)
       const next = nextRestockISO(p.restockDatesISO)
       for (const it of p.items.length ? p.items : [{ ingredientId: '', ingredientName: '', amount: 0 }]) {
+        const unitLabel = it.ingredientId ? unitLabelOf(it.ingredientId) : ''
         rows.push({
           프렙명: p.name,
           재료명: it.ingredientName,
-          투입량: it.amount,
+          투입량: unitLabel ? `${it.amount}${unitLabel}` : it.amount,
           총비용: cost,
           평균보충간격일: avg ?? '',
           다음보충예상일: next ?? '',
@@ -198,10 +200,19 @@ export function PrepsPage() {
     downloadXlsx('preps.xlsx', 'Preps', rows)
   }
 
-  const ensureIngredientByName = (name: string) => {
+  const ensureIngredientByName = (name: string, unitLabel?: string) => {
     const key = name.toLowerCase()
     const existing = ingredients.find((x) => x.name.toLowerCase() === key)
-    if (existing) return { ingredient: existing, created: null as Ingredient | null }
+    const normalizedUnitLabel = normalizeUnitLabel(unitLabel) || ''
+    if (existing) {
+      // 엑셀에서 단위가 들어오면, 기존 재료 단위가 없거나 다르면 업데이트 대상으로 포함
+      if (normalizedUnitLabel && (existing.unitLabel ?? (existing.unitType === 'ea' ? '개' : 'g')) !== normalizedUnitLabel) {
+        const now = new Date().toISOString()
+        const updated: Ingredient = { ...existing, unitLabel: normalizedUnitLabel, updatedAtISO: now }
+        return { ingredient: updated, changed: updated }
+      }
+      return { ingredient: existing, changed: null as Ingredient | null }
+    }
     const now = new Date().toISOString()
     const created: Ingredient = {
       id: newId(),
@@ -209,9 +220,10 @@ export function PrepsPage() {
       purchasePrice: 0,
       purchaseUnit: 1,
       unitPrice: 0,
+      unitLabel: normalizedUnitLabel || 'g',
       updatedAtISO: now,
     }
-    return { ingredient: created, created }
+    return { ingredient: created, changed: created }
   }
 
   const buildXlsxPreview = async (file: File) => {
@@ -222,9 +234,9 @@ export function PrepsPage() {
     // 같은 프렙명 병합(재료 누적)
     const prepMap = new Map<
       string,
-      { name: string; items: PrepIngredientItem[]; dates: string[]; createdIngredients: Ingredient[]; errors: string[] }
+      { name: string; items: PrepIngredientItem[]; dates: string[]; changedIngredients: Ingredient[]; errors: string[] }
     >()
-    const createdIngredients: Ingredient[] = []
+    const changedIngredients: Ingredient[] = []
 
     for (let i = 0; i < parsed.length; i++) {
       const row = parsed[i]
@@ -235,7 +247,9 @@ export function PrepsPage() {
 
       const prepName = prepNameRaw.trim()
       const ingName = ingNameRaw.trim()
-      const amount = safeNumber(amountRaw, NaN)
+      const parsedAmount = parseAmountAndUnit(amountRaw)
+      const amount = Number.isFinite(parsedAmount.amount) ? parsedAmount.amount : safeNumber(amountRaw, NaN)
+      const unitLabel = parsedAmount.unitLabel // 없으면 '' (단위 업데이트 안 함)
       const dates = historyRaw
         .split(',')
         .map((d) => d.trim())
@@ -253,17 +267,17 @@ export function PrepsPage() {
 
       let bucket = prepMap.get(prepName.toLowerCase())
       if (!bucket) {
-        bucket = { name: prepName, items: [], dates: [], createdIngredients: [], errors: [] }
+        bucket = { name: prepName, items: [], dates: [], changedIngredients: [], errors: [] }
         prepMap.set(prepName.toLowerCase(), bucket)
       }
       bucket.errors.push(...errors)
       bucket.dates.push(...dates)
 
       if (ingName && Number.isFinite(amount) && amount > 0) {
-        const ensured = ensureIngredientByName(ingName)
-        if (ensured.created) {
-          createdIngredients.push(ensured.created)
-          bucket.createdIngredients.push(ensured.created)
+        const ensured = ensureIngredientByName(ingName, unitLabel)
+        if (ensured.changed) {
+          changedIngredients.push(ensured.changed)
+          bucket.changedIngredients.push(ensured.changed)
         }
         const existingItem = bucket.items.find((x) => x.ingredientId === ensured.ingredient.id)
         if (existingItem) existingItem.amount = round2(existingItem.amount + amount)
@@ -273,7 +287,7 @@ export function PrepsPage() {
 
     const existingByName = new Map(preps.map((p) => [p.name.toLowerCase(), p]))
 
-    const rows: CsvPreviewRow<{ prep: Prep; createdIngredients: Ingredient[] }>[] = [...prepMap.values()].map((b, idx) => {
+    const rows: CsvPreviewRow<{ prep: Prep; changedIngredients: Ingredient[] }>[] = [...prepMap.values()].map((b, idx) => {
       const uniqDates = [...new Set(b.dates)].filter((d) => dayjs(d).isValid()).sort()
       const existing = existingByName.get(b.name.toLowerCase())
       const now = new Date().toISOString()
@@ -287,7 +301,7 @@ export function PrepsPage() {
       return {
         key: `prep_${idx}_${b.name}`,
         rowNo: idx + 1,
-        parsed: { prep, createdIngredients: b.createdIngredients },
+        parsed: { prep, changedIngredients: b.changedIngredients },
         parsedLabel: (
           <Space direction="vertical" size={0}>
             <Typography.Text>{b.name}</Typography.Text>
@@ -313,8 +327,11 @@ export function PrepsPage() {
     // “없는 재료명은 자동 생성(가격 0)”을 실제 apply 때 반영하기 위해 rows에 포함
     setCsvRows(rows)
     setCsvOpen(true)
-    if (createdIngredients.length) {
-      message.info(`엑셀에 없는 재료 ${createdIngredients.length}개는 가격 0으로 생성 예정입니다.`)
+    if (changedIngredients.length) {
+      const createdCount = changedIngredients.filter((x) => !ingredients.find((i) => i.id === x.id)).length
+      const updatedCount = changedIngredients.length - createdCount
+      if (createdCount) message.info(`엑셀에 없는 재료 ${createdCount}개는 가격 0으로 생성 예정입니다.`)
+      if (updatedCount) message.info(`재료 단위 업데이트 ${updatedCount}건이 적용 예정입니다.`)
     }
   }
 
@@ -327,6 +344,7 @@ export function PrepsPage() {
     let createdP = 0
     let updatedP = 0
     let createdI = 0
+    let updatedI = 0
     let skipped = 0
 
     for (const r of csvRows) {
@@ -335,12 +353,20 @@ export function PrepsPage() {
         continue
       }
 
-      // 재료 자동 생성 반영
-      for (const ci of r.parsed.createdIngredients) {
-        if (!ingByName.has(ci.name.toLowerCase())) {
+      // 재료 생성/업데이트(단위 포함) 반영
+      for (const ci of r.parsed.changedIngredients) {
+        const key = ci.name.toLowerCase()
+        const existing = ingByName.get(key)
+        if (!existing) {
           nextIngredients.push(ci)
-          ingByName.set(ci.name.toLowerCase(), ci)
+          ingByName.set(key, ci)
           createdI++
+        } else {
+          const idx = nextIngredients.findIndex((x) => x.id === existing.id)
+          const merged: Ingredient = { ...existing, ...ci, id: existing.id }
+          if (idx >= 0) nextIngredients[idx] = merged
+          ingByName.set(key, merged)
+          updatedI++
         }
       }
 
@@ -363,7 +389,9 @@ export function PrepsPage() {
     savePreps(nextPreps)
     setCsvOpen(false)
     refresh()
-    message.success(`적용 완료: 프렙 생성 ${createdP}, 갱신 ${updatedP}, 재료 자동생성 ${createdI}, 스킵 ${skipped}`)
+    message.success(
+      `적용 완료: 프렙 생성 ${createdP}, 갱신 ${updatedP}, 재료 생성 ${createdI}, 재료 단위/정보 갱신 ${updatedI}, 스킵 ${skipped}`,
+    )
   }
 
   return (
