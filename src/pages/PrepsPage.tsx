@@ -322,10 +322,14 @@ export function PrepsPage() {
         parsedLabel: (
           <Space direction="vertical" size={0}>
             <Typography.Text>{b.name}</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
               재료 {b.items.length}개 / 보충 {uniqDates.length}회
             </Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 11 }} ellipsis={{ tooltip: ingNames.join(', ') }}>
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 11, display: 'block', maxWidth: 360, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              title={ingNames.join(', ')}
+            >
               재료: {ingPreview || '-'}
             </Typography.Text>
           </Space>
