@@ -35,17 +35,30 @@ export function validateScheduleInputs(input: ScheduleInputs): string[] {
   return errs
 }
 
-function shiftQuota(total: number): Record<Shift, number> {
-  // 단순 모바일 MVP: 최소 오픈/마감 1명(가능하면), 나머지는 미들
-  if (total <= 1) return { open: 0, middle: 1, close: 0 }
-  // 요구: 근무 인원이 2명 이상이면 미들도 포함되게
-  // 단, 오픈/마감 최소 1명 규칙은 validateGeneratedSchedule에서 hard-fail로 강제됨.
-  // 여기서는 quota를 최대한 middle을 포함하는 방향으로 배분한다.
-  if (total === 2) return { open: 1, middle: 1, close: 0 }
-  return { open: 1, middle: Math.max(1, total - 2), close: 1 }
+const MIN_SHIFT_UNITS = 0.5 // 오픈/마감 최소(하프 0.5도 1명으로 인정)
+
+function pickRandom<T>(arr: T[]): T | null {
+  if (!arr.length) return null
+  return arr[Math.floor(Math.random() * arr.length)] ?? null
 }
 
-function pickBestCandidate({
+function candidateScoreForShift({
+  staff,
+  shift,
+  workload,
+}: {
+  staff: StaffMember
+  shift: Shift
+  workload: Map<string, number>
+}) {
+  const w = workload.get(staff.id) ?? 0
+  const pr = staff.priority?.[shift] ?? 0
+  const pref = staff.preferredShift === shift ? 1 : 0
+  // 우선순위(shift priority) 중심 + 선호 약간 + workload는 약한 페널티
+  return pr * 10 + pref * 5 - w * 2
+}
+
+function pickBestCandidateForShift({
   candidates,
   shift,
   workload,
@@ -54,19 +67,47 @@ function pickBestCandidate({
   shift: Shift
   workload: Map<string, number>
 }) {
-  let best: StaffMember | null = null
   let bestScore = -Infinity
+  const bests: StaffMember[] = []
   for (const s of candidates) {
-    const w = workload.get(s.id) ?? 0
-    const pr = s.priority?.[shift] ?? 0
-    const pref = s.preferredShift === shift ? 1 : 0
-    const score = pr * 10 + pref * 5 - w * 2
+    const score = candidateScoreForShift({ staff: s, shift, workload })
     if (score > bestScore) {
       bestScore = score
-      best = s
+      bests.length = 0
+      bests.push(s)
+    } else if (score === bestScore) {
+      bests.push(s)
     }
   }
-  return best
+  // 동점이면 랜덤
+  return pickRandom(bests)
+}
+
+function pickBestShiftForStaff({
+  staff,
+  workload,
+}: {
+  staff: StaffMember
+  workload: Map<string, number>
+}): Shift | null {
+  // requiredShift가 있으면 무조건 그 시프트
+  if (staff.requiredShift) return staff.requiredShift
+  const shifts = staff.availableShifts
+  if (!shifts.length) return null
+
+  let bestScore = -Infinity
+  const bests: Shift[] = []
+  for (const sh of shifts) {
+    const score = candidateScoreForShift({ staff, shift: sh, workload })
+    if (score > bestScore) {
+      bestScore = score
+      bests.length = 0
+      bests.push(sh)
+    } else if (score === bestScore) {
+      bests.push(sh)
+    }
+  }
+  return pickRandom(bests)
 }
 
 export function generateSchedule(input: ScheduleInputs): { assignments: ScheduleAssignment[]; stats: ScheduleStats[] } {
@@ -90,17 +131,25 @@ export function generateSchedule(input: ScheduleInputs): { assignments: Schedule
     const delta = Number.isFinite(req.needDelta) ? req.needDelta : req.needBoost ? 1 : 0
     const baseNeed = input.workRules.DAILY_STAFF_BASE + delta
     const need = Math.min(input.workRules.DAILY_STAFF_MAX, Math.max(input.workRules.DAILY_STAFF_BASE, baseNeed))
+    const needForFill = Math.max(need, MIN_SHIFT_UNITS * 2) // 오픈/마감 최소(합 1.0) 때문에 최소 need는 1.0로 보정
 
     const assignedIds = new Set<string>()
     const byShift: Record<Shift, Array<{ staffId: string; unit: 1 | 0.5 }>> = { open: [], middle: [], close: [] }
 
-    // 1) 하프 요청 고정(0.5)
+    // 1) 하프 요청 고정(0.5) + (방어) 잘못된 shift면 가능한 shift로 보정
     for (const h of req.halfStaff) {
       if (req.offStaffIds.includes(h.staffId)) continue
       const s = input.staff.find((x) => x.id === h.staffId)
       if (!s) continue
-      if (!s.availableShifts.includes(h.shift)) continue
-      byShift[h.shift].push({ staffId: s.id, unit: 0.5 })
+      let shift: Shift | null = null
+      if (s.availableShifts.includes(h.shift) && (!s.requiredShift || s.requiredShift === h.shift)) {
+        shift = h.shift
+      } else {
+        shift = pickBestShiftForStaff({ staff: s, workload })
+      }
+      if (!shift) continue
+
+      byShift[shift].push({ staffId: s.id, unit: 0.5 })
       workload.set(s.id, (workload.get(s.id) ?? 0) + 0.5)
       assignedIds.add(s.id)
     }
@@ -110,30 +159,53 @@ export function generateSchedule(input: ScheduleInputs): { assignments: Schedule
         byShift.middle.reduce((a, b) => a + b.unit, 0) +
         byShift.close.reduce((a, b) => a + b.unit, 0)) as number
 
-    const fullSlots = Math.max(0, Math.ceil(need - currentUnits()))
-    const quota = shiftQuota(fullSlots)
+    const canWorkBase = () => input.staff.filter((s) => !req.offStaffIds.includes(s.id) && !assignedIds.has(s.id))
 
-    const canWork = input.staff.filter((s) => !req.offStaffIds.includes(s.id) && !assignedIds.has(s.id))
-
-    const fillShift = (shift: Shift, count: number) => {
-      for (let i = 0; i < count; i++) {
-        const candidates = canWork.filter((s) => {
-          if (assignedIds.has(s.id)) return false
-          if (!s.availableShifts.includes(shift)) return false
-          if (s.requiredShift && s.requiredShift !== shift) return false
-          return true
-        })
-        const best = pickBestCandidate({ candidates, shift, workload })
-        if (!best) break
-        byShift[shift].push({ staffId: best.id, unit: 1 })
-        workload.set(best.id, (workload.get(best.id) ?? 0) + 1)
-        assignedIds.add(best.id)
-      }
+    const pickAndAssignToShift = (shift: Shift) => {
+      const candidates = canWorkBase().filter((s) => {
+        if (!s.availableShifts.includes(shift)) return false
+        if (s.requiredShift && s.requiredShift !== shift) return false
+        return true
+      })
+      const best = pickBestCandidateForShift({ candidates, shift, workload })
+      if (!best) return false
+      byShift[shift].push({ staffId: best.id, unit: 1 })
+      workload.set(best.id, (workload.get(best.id) ?? 0) + 1)
+      assignedIds.add(best.id)
+      return true
     }
 
-    fillShift('open', quota.open)
-    fillShift('close', quota.close)
-    fillShift('middle', quota.middle)
+    // 2) 오픈/마감 최소 0.5 강제(need와 무관하게 우선 충족)
+    if (byShift.open.reduce((sum, x) => sum + x.unit, 0) < MIN_SHIFT_UNITS) pickAndAssignToShift('open')
+    if (byShift.close.reduce((sum, x) => sum + x.unit, 0) < MIN_SHIFT_UNITS) pickAndAssignToShift('close')
+
+    // 3) 나머지는 필요 인원(needForFill)까지 우선순위 기반으로 채움(동점 랜덤)
+    while (currentUnits() < needForFill) {
+      const pool = canWorkBase()
+      if (!pool.length) break
+
+      // 후보별로 "자기에게 가장 높은 우선순위 시프트"를 계산해서, 그 점수가 높은 사람부터 배정
+      let bestScore = -Infinity
+      const bestCandidates: Array<{ staff: StaffMember; shift: Shift }> = []
+      for (const s of pool) {
+        const sh = pickBestShiftForStaff({ staff: s, workload })
+        if (!sh) continue
+        const score = candidateScoreForShift({ staff: s, shift: sh, workload })
+        if (score > bestScore) {
+          bestScore = score
+          bestCandidates.length = 0
+          bestCandidates.push({ staff: s, shift: sh })
+        } else if (score === bestScore) {
+          bestCandidates.push({ staff: s, shift: sh })
+        }
+      }
+      const pick = pickRandom(bestCandidates)
+      if (!pick) break
+
+      byShift[pick.shift].push({ staffId: pick.staff.id, unit: 1 })
+      workload.set(pick.staff.id, (workload.get(pick.staff.id) ?? 0) + 1)
+      assignedIds.add(pick.staff.id)
+    }
 
     assignments.push({ dateISO, byShift })
   }
@@ -170,7 +242,6 @@ export function validateGeneratedSchedule(input: ScheduleInputs, assignments: Sc
     // 오픈/마감 최소 1명 강제(불가능하면 hard fail)
     const openUnits = a.byShift.open.reduce((sum, x) => sum + x.unit, 0)
     const closeUnits = a.byShift.close.reduce((sum, x) => sum + x.unit, 0)
-    const MIN_SHIFT_UNITS = 0.5 // 하프(0.5)도 1명으로 인정
     if (openUnits < MIN_SHIFT_UNITS || closeUnits < MIN_SHIFT_UNITS) {
       const offCount = req?.offStaffIds?.length ?? 0
       const availableOpen = input.staff.filter((s) => !req?.offStaffIds.includes(s.id) && s.availableShifts.includes('open')).length
